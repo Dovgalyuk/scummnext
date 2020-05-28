@@ -1,3 +1,5 @@
 main.c
 engine.c
 script.c
+debug.c
+resource.c

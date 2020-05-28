@@ -1,6 +1,9 @@
 #include <arch/zxn.h>
 #include <arch/zxn/esxdos.h>
 #include <stdio.h>
+#include "debug.h"
+#include "resource.h"
+#include "script.h"
 
 const int _numGlobalObjects = 775;
 const int _numRooms = 55;
@@ -16,9 +19,6 @@ static const int v1MMNEScostTables[2][6] = {
 // costume 77 is a character set translation table
 // costume 78 is a preposition list
 // costume 79 is unused but allocated, so the total is a nice even number :)
-#define _numCostumes 80
-const int _numScripts = 200;
-const int _numSounds = 100;
 
 int _numVariables = 800;				// 800
 int _numBitVariables = 4096;			// 2048
@@ -28,51 +28,15 @@ int _numVerbs = 100;
 int _numNewNames = 50;
 int _numCharsets = 9;					// 9
 int _numInventory = 80;					// 80
-int _numGlobalScripts = 200;
+// all scripts are global in MM
+//int _numGlobalScripts = 200;
 int _numFlObject = 50;
 
 int _shadowPaletteSize = 256;
 
-typedef struct Resource
-{
-    uint8_t room;
-    uint16_t roomoffs;
-} Resource;
-
-Resource costumes[_numCostumes];
-
-#define ENC_BYTE 0xff
-typedef unsigned char HFILE;
-
-uint8_t readByte(HFILE f)
-{
-    uint8_t b;
-    esx_f_read(f, &b, 1);
-    return b ^ ENC_BYTE;
-}
-
-uint16_t readWord(HFILE f)
-{
-    uint8_t b[2];
-    esx_f_read(f, b, 2);
-    return (b[0] ^ ENC_BYTE) + (b[1] ^ ENC_BYTE) * 0x100;
-}
-
 uint16_t getWord(uint8_t *p)
 {
     return p[0] + p[1] * 0x100;
-}
-
-HFILE openRoom(uint8_t i)
-{
-    char fname[16];
-    sprintf(fname, "MM/%02u.LFL", i);
-    return esx_f_open(fname, ESX_MODE_OPEN_EXIST | ESX_MODE_READ);
-}
-
-void closeRoom(HFILE f)
-{
-    esx_f_close(f);
 }
 
 // not for sound
@@ -101,14 +65,6 @@ void closeRoom(HFILE f)
 //     return loadResource(&costumes[n]);
 // }
 
-HFILE seekResource(Resource *res)
-{
-    HFILE f = openRoom(res->room);
-    esx_f_seek(f, res->roomoffs, ESX_SEEK_SET);
-
-    return f;
-}
-
 // void decodeNESTrTable()
 // {
 //  	byte *table = loadCostume(77);
@@ -118,7 +74,7 @@ HFILE seekResource(Resource *res)
 //         printf("char '%c' to tile %x\n", i + 32, table[i + 2]);
 // }
 
-void decodeNESTileData(uint8_t *dst, HFILE f, uint16_t len)
+void decodeNESTileData(uint8_t *dst, HROOM f, uint16_t len)
 {
     // decode NES tile data
     uint8_t count = readByte(f);
@@ -166,10 +122,10 @@ void drawPixel(uint8_t x, uint8_t y, uint8_t c)
 void decodeNESBaseTiles()
 {
     uint8_t base[4096];
-    HFILE f = seekResource(&costumes[37]);
+    HROOM f = seekResource(&costumes[37]);
     uint16_t len = readWord(f);
     uint8_t count = readByte(f);
-    //printf("NES base tiles %u %u\n", count, len);
+    DEBUG_PRINTF("NES base tiles %u %u\n", count, len);
     decodeNESTileData(base, f, len - 3);
     closeRoom(f);
  
@@ -203,9 +159,10 @@ __sfr __at 0x68 IO_68;
 int main()
 {
     int i;
-    HFILE f = openRoom(0);
+    HROOM f = openRoom(0);
 
-	printf("Magic %u\n", readWord(f)); /* version magic number */
+    uint16_t magic = readWord(f);
+	DEBUG_PRINTF("Magic %x\n", magic); /* version magic number */
 	for (i = 0; i != _numGlobalObjects; i++) {
 	 	uint8_t tmp = readByte(f);
         //printf("global %u owner %u state %u\n", i, tmp & 15, tmp >> 4);
@@ -224,6 +181,14 @@ int main()
 	for (i = 0; i < _numCostumes; i++) {
         costumes[i].roomoffs = readWord(f);
         //printf("costume %u room %u offs %u\n", i, costumes[i].room, costumes[i].roomoffs);
+	}
+
+	for (i = 0; i < _numScripts; i++) {
+        scripts[i].room = readByte(f);
+	}
+	for (i = 0; i < _numScripts; i++) {
+        scripts[i].roomoffs = readWord(f);
+        //DEBUG_PRINTF("script %u room %u offs %x\n", i, scripts[i].room, scripts[i].roomoffs);
 	}
 
     closeRoom(f);
@@ -257,6 +222,9 @@ int main()
     // NES charset
     // decodeNESTrTable();
     decodeNESBaseTiles();
+
+    // boot script
+    runScript(1);
 
     while (1);
 }

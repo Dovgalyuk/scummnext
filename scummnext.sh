@@ -1,1 +1,1 @@
-zesarux --machine tbblue --quickexit --enable-esxdos-handler --nowelcomemessage scummnext.nex
+zesarux --machine tbblue --quickexit --enable-esxdos-handler --hardware-debug-ports --nowelcomemessage scummnext.nex
