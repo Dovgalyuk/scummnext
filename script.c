@@ -195,9 +195,40 @@ static void parseString(void)
 	//actorTalk(buffer);
 }
 
+static void jumpRelative(int cond)
+{
+	int16_t offset = fetchScriptWord();
+	if (!cond)
+		stack[curScript].offset += offset;
+    DEBUG_PRINTF("   jump to %x\n", stack[curScript].offset + offset);
+}
+
 ///////////////////////////////////////////////////////////
 // opcodes
 ///////////////////////////////////////////////////////////
+
+static void op_putActor(void)
+{
+    DEBUG_PUTS("putActor\n");
+	uint8_t act = getVarOrDirectByte(PARAM_1);
+	int x, y;
+	// Actor *a;
+
+	//a = derefActor(act, "o2_putActor");
+	x = getVarOrDirectByte(PARAM_2);
+	y = getVarOrDirectByte(PARAM_3);
+
+	//a->putActor(x, y);
+}
+
+static void op_setState08(void)
+{
+    DEBUG_PUTS("setState08\n");
+	int obj = getVarOrDirectWord(PARAM_1);
+	// putState(obj, getState(obj) | kObjectState_08);
+	// markObjectRectAsDirty(obj);
+	// clearDrawObjectQueue();
+}
 
 static void op_resourceRoutines(void)
 {
@@ -206,6 +237,23 @@ static void op_resourceRoutines(void)
 	uint8_t opcode = fetchScriptByte();
     DEBUG_PRINTF("   resid %u opcode %u\n", resid, opcode);
     // TODO
+}
+
+static void op_animateActor(void)
+{
+    DEBUG_PUTS("animateActor\n");
+	uint8_t act = getVarOrDirectByte(PARAM_1);
+	uint8_t anim = getVarOrDirectByte(PARAM_2);
+
+	// Actor *a = derefActor(act, "o5_animateActor");
+	// a->animateActor(anim);
+}
+
+static void op_panCameraTo(void)
+{
+    DEBUG_PUTS("panCameraTo\n");
+    //panCameraTo(getVarOrDirectByte(PARAM_1) * V12_X_MULTIPLIER, 0);
+    getVarOrDirectByte(PARAM_1);
 }
 
 static void op_move(void)
@@ -230,6 +278,43 @@ static void op_setBitVar(void)
 		;//_scummVars[bit_var] |= (1 << bit_offset);
 	else
 		;//_scummVars[bit_var] &= ~(1 << bit_offset);
+}
+
+static void op_startSound(void)
+{
+    DEBUG_PUTS("startSound\n");
+    getVarOrDirectByte(PARAM_1);
+}
+
+static void op_walkActorTo(void)
+{
+    DEBUG_PUTS("walkActorTo\n");
+	int x, y;
+	//Actor *a;
+
+	int act = getVarOrDirectByte(PARAM_1);
+
+	//a = derefActor(act, "o2_walkActorTo");
+
+	x = getVarOrDirectByte(PARAM_2);
+	y = getVarOrDirectByte(PARAM_3);
+
+	//a->startWalkActor(x, y, -1);
+}
+
+static void op_putActorInRoom(void)
+{
+    DEBUG_PUTS("putActorInRoom\n");
+	//Actor *a;
+	uint8_t act = getVarOrDirectByte(PARAM_1);
+    uint8_t room = getVarOrDirectByte(PARAM_2);
+
+	//a = derefActor(act, "o2_putActorInRoom");
+
+	//a->_room = room;
+	// if (!room) {
+	// 	a->putActor(0, 0, 0);
+	// }
 }
 
 static void op_actorOps(void)
@@ -317,6 +402,47 @@ static void op_setVarRange()
 	} while (--a);
 }
 
+static void op_breakHere(void)
+{
+    DEBUG_PUTS("breakHere\n");
+    //stopScript();
+}
+
+static void op_delay(void)
+{
+    DEBUG_PUTS("delay\n");
+	int32_t delay = fetchScriptByte();
+	delay |= fetchScriptByte() << 8;
+	delay |= (int32_t)fetchScriptByte() << 16;
+	// vm.slot[_currentScript].delay = delay;
+	// vm.slot[_currentScript].status = ssPaused;
+    op_breakHere();
+}
+
+static void op_setCameraAt(void)
+{
+    // setCameraAtEx(getVarOrDirectByte(PARAM_1) * V12_X_MULTIPLIER);
+    DEBUG_PUTS("setCameraAt\n");
+    getVarOrDirectByte(PARAM_1);
+}
+
+static void op_waitForActor(void)
+{
+    DEBUG_PUTS("waitForActor\n");
+    uint8_t act = getVarOrDirectByte(PARAM_1);
+	// Actor *a = derefActor(act, "o2_waitForActor");
+	// if (a->_moving) {
+	// 	_scriptPointer -= 2;
+	// 	op_breakHere();
+	// }
+}
+
+static void op_stopSound(void)
+{
+    DEBUG_PUTS("stopSound\n");
+    getVarOrDirectByte(PARAM_1);
+}
+
 static void op_cutscene(void)
 {
     DEBUG_PUTS("cutscene\n");
@@ -343,6 +469,23 @@ static void op_startScript(void)
     //         return;
     // }
     pushScript(script);
+}
+
+static void op_getActorX(void)
+{
+    DEBUG_PUTS("getActorX\n");
+	uint8_t a;
+	getResultPos();
+
+	a = getVarOrDirectByte(PARAM_1);
+    setResult(0/*getObjX(actorToObj(a))*/);
+}
+
+static void op_actorFollowCamera(void)
+{
+    DEBUG_PUTS("actorFollowCamera\n");
+    //actorFollowCamera(getVarOrDirectByte(0x80));
+    getVarOrDirectByte(0x80);
 }
 
 static void op_beginOverride(void)
@@ -427,6 +570,15 @@ static void op_loadRoom(void)
     // _fullRedraw = true;
 }
 
+static void op_isGreater(void)
+{
+    DEBUG_PUTS("isGreater");
+	uint16_t a = getVar();
+	uint16_t b = getVarOrDirectWord(PARAM_1);
+    DEBUG_PRINTF("%u %u\n", a, b);
+	jumpRelative(b > a);
+}
+
 void executeScript(void)
 {
     while (curScript >= 0)
@@ -437,8 +589,20 @@ void executeScript(void)
         case 0x00:
             stopScript();
             break;
+        case 0x01:
+            op_putActor();
+            break;
+        case 0x07:
+            op_setState08();
+            break;
         case 0x0c:
             op_resourceRoutines();
+            break;
+        case 0x11:
+            op_animateActor();
+            break;
+        case 0x12:
+            op_panCameraTo();
             break;
         case 0x13:
         case 0x53:
@@ -454,8 +618,29 @@ void executeScript(void)
         case 0x5b:
             op_setBitVar();
             break;
-        case 0x26:
-            op_setVarRange();
+        case 0x1c:
+            op_startSound();
+            break;
+        case 0x1e:
+            op_walkActorTo();
+            break;
+        // case 0x26:
+        //     op_setVarRange();
+        //     break;
+        case 0x2d:
+            op_putActorInRoom();
+            break;
+        case 0x2e:
+            op_delay();
+            break;
+        case 0x32:
+            op_setCameraAt();
+            break;
+        case 0x3b:
+            op_waitForActor();
+            break;
+        case 0x3c:
+            op_stopSound();
             break;
         case 0x40:
             op_cutscene();
@@ -463,17 +648,32 @@ void executeScript(void)
         case 0x42:
             op_startScript();
             break;
+        case 0x43:
+            op_getActorX();
+            break;
+        case 0x52:
+            op_actorFollowCamera();
+            break;
         case 0x58:
             op_beginOverride();
             break;
         case 0x60:
             op_cursorCommand();
             break;
-        case 0x64:
-            op_loadRoomWithEgo();
-            break;
+        // case 0x64:
+        //     op_loadRoomWithEgo();
+        //     break;
         case 0x72:
             op_loadRoom();
+            break;
+        case 0x78:
+            op_isGreater();
+            break;
+        case 0x80:
+            op_breakHere();
+            break;
+        case 0xa0:
+            stopScript();
             break;
         default:
             DEBUG_PRINTF("Unknown opcode %x\n", opcode);
