@@ -4,5 +4,6 @@
 #include <stdint.h>
 
 void runScript(uint8_t s);
+void processScript(void);
 
 #endif

@@ -1,9 +1,9 @@
 #include <arch/zxn.h>
 #include <arch/zxn/esxdos.h>
-#include <stdio.h>
 #include "debug.h"
 #include "resource.h"
 #include "script.h"
+#include "graphics.h"
 
 const int _numGlobalObjects = 775;
 const int _numRooms = 55;
@@ -65,97 +65,6 @@ uint16_t getWord(uint8_t *p)
 //     return loadResource(&costumes[n]);
 // }
 
-// void decodeNESTrTable()
-// {
-//  	byte *table = loadCostume(77);
-//     int size = getUint16LE(table);
-//     printf("NES translation table size %d\n", size);
-//     for (int i = 0 ; i < size ; ++i)
-//         printf("char '%c' to tile %x\n", i + 32, table[i + 2]);
-// }
-
-void decodeNESTileData(uint8_t *dst, HROOM f, uint16_t len)
-{
-    // decode NES tile data
-    uint8_t count = readByte(f);
-    uint8_t data = readByte(f);
-    len -= 2;
-	while (len) {
-		for (uint8_t j = 0; j < (count & 0x7F); j++)
-        {
-			*dst++ = data;
-            if (count & 0x80)
-            {
-                if (len)
-                {
-                    data = readByte(f);
-                    --len;
-                }
-            }
-        }
-		if (count & 0x80)
-        {
-            count = data;
-        }
-        else
-        {
-            if (len)
-            {
-                count = readByte(f);
-                --len;
-            }
-        }
-        if (len)
-        {
-            data = readByte(f);
-            --len;
-        }
-	}
-}
-
-void drawPixel(uint8_t x, uint8_t y, uint8_t c)
-{
-    y &= 0x3f;
-    *(unsigned char*)((y << 8) | x) = c;
-}
-
-void decodeNESBaseTiles()
-{
-    uint8_t base[4096];
-    HROOM f = seekResource(&costumes[37]);
-    uint16_t len = readWord(f);
-    uint8_t count = readByte(f);
-    DEBUG_PRINTF("NES base tiles %u %u\n", count, len);
-    decodeNESTileData(base, f, len - 3);
-    closeRoom(f);
- 
-    // print tiles
-    for (uint8_t c = 0 ; c < count ; ++c)
-    {
-        //printf("tile %u\n", c);
-        for (uint8_t i = 0 ; i < 8 ; ++i)
-        {
-            uint8_t c0 = base[c * 16 + i];
-            uint8_t c1 = base[c * 16 + i + 8];
-            //printf(" %u %u\n", c0, c1);
-            for (uint8_t j = 0 ; j < 8 ; ++j)
-            {
-                uint8_t col = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-                uint8_t cc = col * 64;
-                drawPixel(c % 32 * 8 + j, c / 32 * 8 + i, cc);
-                //printf("%u ", col);
-            }
-            //printf("\n");
-        }
-    }
-}
-
-__sfr __at 0x15 IO_15;
-__sfr __at 0x40 IO_40;
-__sfr __at 0x41 IO_41;
-__sfr __at 0x43 IO_43;
-__sfr __at 0x68 IO_68;
-
 int main()
 {
     int i;
@@ -196,35 +105,18 @@ int main()
     // decodeNESBaseTiles();
     // while (1);
 
-    // enable Layer 2 mode
-
-    // setup palette
-    IO_43 = 0x10;
-    IO_40 = 0;
-    for (i = 0 ; i < 256 ; ++i)
-        IO_41 = i;
-
-    // // switch on ULANext
-    // IO_43 = 1;
-    // // disable ULA output
-    // IO_68 = 0x80;
-    // // sprite control: sprites/layer2/ula
-    // IO_15 = 1;
-    // // map write only to 0-3fff
-    
-    // enable layer2
-    IO_LAYER_2_CONFIG = 2 | 1;
-
-    unsigned char *p = 0;
-    for (i = 0 ; i < 0x4000 ; ++i)
-        *p++ = i;
+    initGraphics();
 
     // NES charset
-    // decodeNESTrTable();
+    decodeNESTrTable();
     decodeNESBaseTiles();
 
     // boot script
     runScript(1);
 
-    while (1);
+    while (1)
+    {
+        processScript();
+        handleDrawing();
+    }
 }

@@ -1,6 +1,8 @@
 #include "script.h"
 #include "resource.h"
 #include "debug.h"
+#include "actor.h"
+#include "room.h"
 
 typedef struct Frame
 {
@@ -15,6 +17,23 @@ enum {
     PARAM_2 = 0x40,
     PARAM_3 = 0x20
 };
+
+enum ObjectStateV2 {
+	kObjectStatePickupable = 1,
+	kObjectStateUntouchable = 2,
+	kObjectStateLocked = 4,
+
+	// FIXME: Not quite sure how to name state 8. It seems to mark some kind
+	// of "activation state" for the given object. E.g. is a door open?
+	// Is a drawer extended? In addition it is used to toggle the look
+	// of objects that the user can "pick up" (i.e. it is set in
+	// o2_pickupObject together with kObjectStateUntouchable). So in a sense,
+	// it can also mean "invisible" in some situations.
+	kObjectState_08 = 8
+};
+
+#define V12_X_MULTIPLIER 8
+#define V12_Y_MULTIPLIER 2
 
 #define VAR_EGO 0
 #define VAR_CAMERA_POS_X 2
@@ -56,8 +75,9 @@ enum {
 static Frame stack[STACK_SIZE];
 static int8_t curScript = -1;
 static uint8_t scriptBytes[4096];
-uint16_t resultVarNumber;
-uint8_t opcode;
+static uint16_t resultVarNumber;
+static uint8_t opcode;
+static uint8_t exitFlag;
 
 static void loadScriptBytes(void)
 {
@@ -80,7 +100,7 @@ static uint16_t fetchScriptWord()
 
 static uint16_t readVar(uint16_t v)
 {
-    DEBUG_PRINTF("   readVar %x\n", v);
+//    DEBUG_PRINTF("   readVar %x\n", v);
     return 0;
 }
 
@@ -91,7 +111,7 @@ static uint16_t getVar(void)
 
 void writeVar(uint16_t var, uint16_t val)
 {
-    DEBUG_PRINTF("   writeVar %x = %x\n", var, val);
+//    DEBUG_PRINTF("   writeVar %x = %x\n", var, val);
 }
 
 static int16_t fetchScriptWordSigned(void)
@@ -152,9 +172,10 @@ static void pushScript(uint8_t s)
     stack[curScript].offset = 4;
 }
 
-static void parseString(void)
+static void parseString(uint8_t actor)
 {
-    // TODO
+    uint8_t buffer[512];
+    uint8_t *ptr = buffer;
 	uint8_t c;
 
 	while ((c = fetchScriptByte())) {
@@ -176,13 +197,16 @@ static void parseString(void)
 		// } else
 		// *ptr++ = c;
         DEBUG_PUTC(c);
+        *ptr++ = c;
 
 		if (insertSpace)
+        {
             DEBUG_PUTC(' ');
-			//*ptr++ = ' ';
+			*ptr++ = ' ';
+        }
 
 	}
-	//*ptr = 0;
+	*ptr = 0;
 
     // TODO
 	// int textSlot = 0;
@@ -192,7 +216,7 @@ static void parseString(void)
 	// _string[textSlot].center = false;
 	// _string[textSlot].overhead = false;
 
-	//actorTalk(buffer);
+	actorTalk(actor, buffer);
 }
 
 static void jumpRelative(int cond)
@@ -200,7 +224,29 @@ static void jumpRelative(int cond)
 	int16_t offset = fetchScriptWord();
 	if (!cond)
 		stack[curScript].offset += offset;
-    DEBUG_PRINTF("   jump to %x\n", stack[curScript].offset + offset);
+//    DEBUG_PRINTF("   jump to %x\n", stack[curScript].offset + offset);
+}
+
+static uint8_t isScriptRunning(uint8_t s)
+{
+    return 0;
+}
+
+static uint8_t getState(uint16_t obj)
+{
+    return 0;
+}
+
+static uint16_t getActiveObject(void)
+{
+	return getVarOrDirectWord(PARAM_1);
+}
+
+static void ifStateCommon(uint16_t type)
+{
+	uint8_t obj = getActiveObject();
+
+	jumpRelative((getState(obj) & type) != 0);
 }
 
 ///////////////////////////////////////////////////////////
@@ -219,6 +265,13 @@ static void op_putActor(void)
 	y = getVarOrDirectByte(PARAM_3);
 
 	//a->putActor(x, y);
+}
+
+static void op_startMusic(void)
+{
+    getResultPos();
+    getVarOrDirectByte(PARAM_1);
+    setResult(0);
 }
 
 static void op_setState08(void)
@@ -258,14 +311,14 @@ static void op_panCameraTo(void)
 
 static void op_move(void)
 {
-    DEBUG_PUTS("move\n");
+    //DEBUG_PUTS("move\n");
 	getResultPos();
 	setResult(getVarOrDirectWord(PARAM_1));
 }
 
 static void op_setBitVar(void)
 {
-    DEBUG_PUTS("setBitVar\n");
+    //DEBUG_PUTS("setBitVar\n");
 	uint16_t var = fetchScriptWord();
 	uint8_t a = getVarOrDirectByte(PARAM_1);
 
@@ -379,11 +432,23 @@ static void op_print(void)
 {
     uint8_t act = getVarOrDirectByte(PARAM_1);
     DEBUG_PRINTF("print(%u, ", act);
-    parseString();
+    parseString(act);
     DEBUG_PUTS(")\n");
 }
 
-static void op_setVarRange()
+static void op_getRandomNr(void)
+{
+    //DEBUG_PUTS("getRandomNr\n");
+	getResultPos();
+	setResult(/*_rnd.getRandomNumber*/(getVarOrDirectByte(PARAM_1)));
+}
+
+static void op_jumpRelative(void)
+{
+    jumpRelative(0);
+}
+
+static void op_setVarRange(void)
 {
 	uint16_t a, b;
 
@@ -404,13 +469,35 @@ static void op_setVarRange()
 
 static void op_breakHere(void)
 {
-    DEBUG_PUTS("breakHere\n");
+    //DEBUG_PUTS("breakHere\n");
     //stopScript();
+    exitFlag = 1;
+}
+
+static void op_delayVariable(void)
+{
+    getVar();
+	//vm.slot[_currentScript].delay = getVar();
+	//vm.slot[_currentScript].status = ssPaused;
+	op_breakHere();
+}
+
+static void op_assignVarByte(void)
+{
+	getResultPos();
+	setResult(fetchScriptByte());
+}
+
+static void op_isNotEqual(void)
+{
+	uint16_t a = getVar();
+	uint16_t b = getVarOrDirectWord(PARAM_1);
+	jumpRelative(b != a);
 }
 
 static void op_delay(void)
 {
-    DEBUG_PUTS("delay\n");
+    //DEBUG_PUTS("delay\n");
 	int32_t delay = fetchScriptByte();
 	delay |= fetchScriptByte() << 8;
 	delay |= (int32_t)fetchScriptByte() << 16;
@@ -424,6 +511,13 @@ static void op_setCameraAt(void)
     // setCameraAtEx(getVarOrDirectByte(PARAM_1) * V12_X_MULTIPLIER);
     DEBUG_PUTS("setCameraAt\n");
     getVarOrDirectByte(PARAM_1);
+}
+
+static void op_isLessEqual(void)
+{
+	uint16_t a = getVar();
+	uint16_t b = getVarOrDirectWord(PARAM_1);
+	jumpRelative(b <= a);
 }
 
 static void op_waitForActor(void)
@@ -473,12 +567,21 @@ static void op_startScript(void)
 
 static void op_getActorX(void)
 {
-    DEBUG_PUTS("getActorX\n");
+//    DEBUG_PUTS("getActorX\n");
 	uint8_t a;
 	getResultPos();
 
 	a = getVarOrDirectByte(PARAM_1);
     setResult(0/*getObjX(actorToObj(a))*/);
+}
+
+static void op_isEqual(void)
+{
+    uint8_t var = fetchScriptByte();
+//    DEBUG_PRINTF("isEqual Var%u\n", var);
+	uint16_t a = readVar(var);
+	uint16_t b = getVarOrDirectWord(PARAM_1);
+	jumpRelative(b == a);
 }
 
 static void op_actorFollowCamera(void)
@@ -490,13 +593,21 @@ static void op_actorFollowCamera(void)
 
 static void op_beginOverride(void)
 {
-    DEBUG_PUTS("beginOverride\n");
+    //DEBUG_PUTS("beginOverride\n");
 	// vm.cutScenePtr[0] = _scriptPointer - _scriptOrgPointer;
 	// vm.cutSceneScript[0] = _currentScript;
 
 	// Skip the jump instruction following the override instruction
 	fetchScriptByte();
 	fetchScriptWord();
+}
+
+static void op_add(void)
+{
+	uint16_t a;
+	getResultPos();
+	a = getVarOrDirectWord(PARAM_1);
+	//_scummVars[_resultVarNumber] += a;
 }
 
 static void op_cursorCommand(void)
@@ -560,28 +671,54 @@ static void op_loadRoomWithEgo(void)
 	runScript(5);
 }
 
+static void op_isScriptRunning(void)
+{
+//    DEBUG_PUTS("isScriptRunning\n");
+	getResultPos();
+	setResult(isScriptRunning(getVarOrDirectByte(PARAM_1)));
+}
+
 static void op_loadRoom(void)
 {
     uint8_t room = getVarOrDirectByte(PARAM_1);
     DEBUG_PRINTF("loadRoom %u\n", room);
 
-    // TODO
-    // startScene(room, 0, 0);
+    startScene(room);
     // _fullRedraw = true;
 }
 
 static void op_isGreater(void)
 {
-    DEBUG_PUTS("isGreater");
+//    DEBUG_PUTS("isGreater");
 	uint16_t a = getVar();
 	uint16_t b = getVarOrDirectWord(PARAM_1);
-    DEBUG_PRINTF("%u %u\n", a, b);
+//    DEBUG_PRINTF("%u %u\n", a, b);
 	jumpRelative(b > a);
+}
+
+static void op_findObject(void)
+{
+//    DEBUG_PUTS("findObject\n");
+	uint16_t obj = 0;
+	getResultPos();
+	uint16_t x = getVarOrDirectByte(PARAM_1) * V12_X_MULTIPLIER;
+	uint16_t y = getVarOrDirectByte(PARAM_2) * V12_Y_MULTIPLIER;
+	// obj = findObject(x, y);
+	// if (obj == 0 && (_game.platform == Common::kPlatformNES) && (_userState & USERSTATE_IFACE_INVENTORY)) {
+	// 	if (_mouseOverBoxV2 >= 0 && _mouseOverBoxV2 < 4)
+	// 		obj = findInventory(VAR(VAR_EGO), _mouseOverBoxV2 + _inventoryOffset + 1);
+	// }
+	setResult(obj);
+}
+
+static void op_ifState01(void)
+{
+    ifStateCommon(kObjectStatePickupable);
 }
 
 void executeScript(void)
 {
-    while (curScript >= 0)
+    while (curScript >= 0 && !exitFlag)
     {
         opcode = fetchScriptByte();
         switch (opcode)
@@ -591,6 +728,9 @@ void executeScript(void)
             break;
         case 0x01:
             op_putActor();
+            break;
+        case 0x02:
+            op_startMusic();
             break;
         case 0x07:
             op_setState08();
@@ -611,6 +751,12 @@ void executeScript(void)
         case 0x14:
             op_print();
             break;
+        case 0x16:
+            op_getRandomNr();
+            break;
+        case 0x18:
+            op_jumpRelative();
+            break;
         case 0x1a:
             op_move();
             break;
@@ -627,6 +773,12 @@ void executeScript(void)
         // case 0x26:
         //     op_setVarRange();
         //     break;
+        case 0x2b:
+            op_delayVariable();
+            break;
+        case 0x2c:
+            op_assignVarByte();
+            break;
         case 0x2d:
             op_putActorInRoom();
             break;
@@ -635,6 +787,9 @@ void executeScript(void)
             break;
         case 0x32:
             op_setCameraAt();
+            break;
+        case 0x38:
+            op_isLessEqual();
             break;
         case 0x3b:
             op_waitForActor();
@@ -651,11 +806,17 @@ void executeScript(void)
         case 0x43:
             op_getActorX();
             break;
+        case 0x48:
+            op_isEqual();
+            break;
         case 0x52:
             op_actorFollowCamera();
             break;
         case 0x58:
             op_beginOverride();
+            break;
+        case 0x5a:
+            op_add();
             break;
         case 0x60:
             op_cursorCommand();
@@ -663,6 +824,9 @@ void executeScript(void)
         // case 0x64:
         //     op_loadRoomWithEgo();
         //     break;
+        case 0x68:
+            op_isScriptRunning();
+            break;
         case 0x72:
             op_loadRoom();
             break;
@@ -672,8 +836,17 @@ void executeScript(void)
         case 0x80:
             op_breakHere();
             break;
+        case 0x88:
+            op_isNotEqual();
+            break;
         case 0xa0:
             stopScript();
+            break;
+        case 0xf5:
+            op_findObject();
+            break;
+        case 0xff:
+            op_ifState01();
             break;
         default:
             DEBUG_PRINTF("Unknown opcode %x\n", opcode);
@@ -686,5 +859,11 @@ void executeScript(void)
 void runScript(uint8_t s)
 {
     pushScript(s);
+    executeScript();
+}
+
+void processScript(void)
+{
+    exitFlag = 0;
     executeScript();
 }

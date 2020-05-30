@@ -3,3 +3,6 @@ engine.c
 script.c
 debug.c
 resource.c
+graphics.c
+actor.c
+room.c
