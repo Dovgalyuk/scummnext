@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "actor.h"
 #include "room.h"
+#include "camera.h"
 
 typedef struct Frame
 {
@@ -35,44 +36,10 @@ enum ObjectStateV2 {
 #define V12_X_MULTIPLIER 8
 #define V12_Y_MULTIPLIER 2
 
-#define VAR_EGO 0
-#define VAR_CAMERA_POS_X 2
-#define VAR_HAVE_MSG 3
-#define VAR_ROOM 4
-#define VAR_OVERRIDE 5
-#define VAR_MACHINE_SPEED 6
-#define VAR_CHARCOUNT 7
-#define VAR_ACTIVE_VERB 8
-#define VAR_ACTIVE_OBJECT1 9
-#define VAR_ACTIVE_OBJECT2 10
-#define VAR_NUM_ACTOR 11
-#define VAR_CURRENT_LIGHTS 12
-#define VAR_CURRENTDRIVE 13
-#define VAR_MUSIC_TIMER 17
-#define VAR_VERB_ALLOWED 18
-#define VAR_ACTOR_RANGE_MIN 19
-#define VAR_ACTOR_RANGE_MAX 20
-#define VAR_CURSORSTATE 21
-#define VAR_CAMERA_MIN_X 23
-#define VAR_CAMERA_MAX_X 24
-#define VAR_TIMER_NEXT 25
-#define VAR_SENTENCE_VERB 26
-#define VAR_SENTENCE_OBJECT1 27
-#define VAR_SENTENCE_OBJECT2 28
-#define VAR_SENTENCE_PREPOSITION 29
-#define VAR_VIRT_MOUSE_X 30
-#define VAR_VIRT_MOUSE_Y 31
-#define VAR_CLICK_AREA 32
-#define VAR_CLICK_VERB 33
-#define VAR_CLICK_OBJECT 35
-#define VAR_ROOM_RESOURCE 36
-#define VAR_LAST_SOUND 37
-#define VAR_BACKUP_VERB 38
-#define VAR_KEYPRESS 39
-#define VAR_CUTSCENEEXIT_KEY 40
-#define VAR_TALK_ACTOR 41
+#define _numVariables 800
 
 static Frame stack[STACK_SIZE];
+uint16_t scummVars[_numVariables];
 static int8_t curScript = -1;
 static uint8_t scriptBytes[4096];
 static uint16_t resultVarNumber;
@@ -100,8 +67,7 @@ static uint16_t fetchScriptWord()
 
 static uint16_t readVar(uint16_t v)
 {
-//    DEBUG_PRINTF("   readVar %x\n", v);
-    return 0;
+    return scummVars[v];
 }
 
 static uint16_t getVar(void)
@@ -111,7 +77,8 @@ static uint16_t getVar(void)
 
 void writeVar(uint16_t var, uint16_t val)
 {
-//    DEBUG_PRINTF("   writeVar %x = %x\n", var, val);
+    scummVars[var] = val;
+    DEBUG_PRINTF("var%u = %u\n", var, val);
 }
 
 static int16_t fetchScriptWordSigned(void)
@@ -145,7 +112,8 @@ void stopScript(void)
         DEBUG_PUTS("Can't stop script, none is running\n");
         DEBUG_HALT;
     }
-    DEBUG_PUTS("Stopping the script\n");
+    DEBUG_PRINTF("Stopping the script %u offset %x\n",
+        stack[curScript].id, stack[curScript].offset - 4);
     --curScript;
     if (curScript >= 0)
     {
@@ -216,7 +184,7 @@ static void parseString(uint8_t actor)
 	// _string[textSlot].center = false;
 	// _string[textSlot].overhead = false;
 
-	actorTalk(actor, buffer);
+	actor_talk(actor, buffer);
 }
 
 static void jumpRelative(int cond)
@@ -255,23 +223,54 @@ static void ifStateCommon(uint16_t type)
 
 static void op_putActor(void)
 {
-    DEBUG_PUTS("putActor\n");
 	uint8_t act = getVarOrDirectByte(PARAM_1);
-	int x, y;
-	// Actor *a;
+	uint8_t x = getVarOrDirectByte(PARAM_2);
+	uint8_t y = getVarOrDirectByte(PARAM_3);
 
-	//a = derefActor(act, "o2_putActor");
-	x = getVarOrDirectByte(PARAM_2);
-	y = getVarOrDirectByte(PARAM_3);
-
-	//a->putActor(x, y);
+	actor_put(act, x, y);
 }
 
 static void op_startMusic(void)
 {
-    getResultPos();
     getVarOrDirectByte(PARAM_1);
-    setResult(0);
+}
+
+static void op_drawObject(void)
+{
+	int obj, idx, i;
+	// ObjectData *od;
+	// uint16 x, y, w, h;
+	int xpos, ypos;
+
+	obj = getVarOrDirectWord(PARAM_1);
+	xpos = getVarOrDirectByte(PARAM_2);
+	ypos = getVarOrDirectByte(PARAM_3);
+
+	// idx = getObjectIndex(obj);
+	// if (idx == -1)
+	// 	return;
+
+	// od = &_objs[idx];
+	// if (xpos != 0xFF) {
+	// 	od->walk_x += (xpos * 8) - od->x_pos;
+	// 	od->x_pos = xpos * 8;
+	// 	od->walk_y += (ypos * 8) - od->y_pos;
+	// 	od->y_pos = ypos * 8;
+	// }
+	// addObjectToDrawQue(idx);
+
+	// x = od->x_pos;
+	// y = od->y_pos;
+	// w = od->width;
+	// h = od->height;
+
+	// i = _numLocalObjects;
+	// while (i--) {
+	// 	if (_objs[i].obj_nr && _objs[i].x_pos == x && _objs[i].y_pos == y && _objs[i].width == w && _objs[i].height == h)
+	// 		putState(_objs[i].obj_nr, getState(_objs[i].obj_nr) & ~kObjectState_08);
+	// }
+
+	// putState(obj, getState(od->obj_nr) | kObjectState_08);
 }
 
 static void op_setState08(void)
@@ -305,8 +304,7 @@ static void op_animateActor(void)
 static void op_panCameraTo(void)
 {
     DEBUG_PUTS("panCameraTo\n");
-    //panCameraTo(getVarOrDirectByte(PARAM_1) * V12_X_MULTIPLIER, 0);
-    getVarOrDirectByte(PARAM_1);
+    camera_panTo(getVarOrDirectByte(PARAM_1));
 }
 
 static void op_move(void)
@@ -318,7 +316,6 @@ static void op_move(void)
 
 static void op_setBitVar(void)
 {
-    //DEBUG_PUTS("setBitVar\n");
 	uint16_t var = fetchScriptWord();
 	uint8_t a = getVarOrDirectByte(PARAM_1);
 
@@ -326,11 +323,10 @@ static void op_setBitVar(void)
 	uint8_t bit_offset = bit_var & 0x0f;
 	bit_var >>= 4;
 
-    // TODO
 	if (getVarOrDirectByte(PARAM_2))
-		;//_scummVars[bit_var] |= (1 << bit_offset);
+		scummVars[bit_var] |= (1 << bit_offset);
 	else
-		;//_scummVars[bit_var] &= ~(1 << bit_offset);
+		scummVars[bit_var] &= ~(1 << bit_offset);
 }
 
 static void op_startSound(void)
@@ -341,50 +337,31 @@ static void op_startSound(void)
 
 static void op_walkActorTo(void)
 {
-    DEBUG_PUTS("walkActorTo\n");
-	int x, y;
-	//Actor *a;
+	uint8_t act = getVarOrDirectByte(PARAM_1);
+	uint8_t x = getVarOrDirectByte(PARAM_2);
+	uint8_t y = getVarOrDirectByte(PARAM_3);
 
-	int act = getVarOrDirectByte(PARAM_1);
-
-	//a = derefActor(act, "o2_walkActorTo");
-
-	x = getVarOrDirectByte(PARAM_2);
-	y = getVarOrDirectByte(PARAM_3);
-
-	//a->startWalkActor(x, y, -1);
+    actor_startWalk(act, x, y);
 }
 
 static void op_putActorInRoom(void)
 {
-    DEBUG_PUTS("putActorInRoom\n");
-	//Actor *a;
 	uint8_t act = getVarOrDirectByte(PARAM_1);
     uint8_t room = getVarOrDirectByte(PARAM_2);
-
-	//a = derefActor(act, "o2_putActorInRoom");
-
-	//a->_room = room;
-	// if (!room) {
-	// 	a->putActor(0, 0, 0);
-	// }
+    actor_setRoom(act, room);
 }
 
 static void op_actorOps(void)
 {
-    DEBUG_PUTS("actorOps\n");
-    // TODO
-
 	uint8_t act = getVarOrDirectByte(PARAM_1);
 	uint8_t arg = getVarOrDirectByte(PARAM_2);
     uint8_t i;
-	// Actor *a;
 
 	uint8_t opcode = fetchScriptByte();
 	if (act == 0 && opcode == 5) {
 		// This case happens in the Zak/MM bootscripts, to set the default talk color (9).
 		//_string[0].color = arg;
-        DEBUG_PRINTF("   Set default talk color %u\n", arg);
+        DEBUG_PRINTF("TODO: Set default talk color %u\n", arg);
 		return;
 	}
 
@@ -393,16 +370,16 @@ static void op_actorOps(void)
 	switch (opcode) {
 	case 1:		// SO_SOUND
 		//a->_sound[0] = arg;
-        DEBUG_PRINTF("   Set actor %u sound %u\n", act, arg);
+        DEBUG_PRINTF("TODO: Set actor %u sound %u\n", act, arg);
 		break;
-	case 2:		// SO_PALETTE
-        i = fetchScriptByte();
-		//a->setPalette(i, arg);
-        DEBUG_PRINTF("   Set actor %u palette %u/%u\n", act, i, arg);
-		break;
+	// case 2:		// SO_PALETTE
+    //     i = fetchScriptByte();
+	// 	//a->setPalette(i, arg);
+    //     DEBUG_PRINTF("  TODO: Set actor %u palette %u/%u\n", act, i, arg);
+	// 	break;
 	case 3:		// SO_ACTOR_NAME
 		//loadPtrToResource(rtActorName, a->_number, NULL);
-        DEBUG_PRINTF("   Set actor %u talk name '", act);
+        DEBUG_PRINTF("TODO: Set actor %u talk name '", act);
         {
             char c;
             do
@@ -415,15 +392,14 @@ static void op_actorOps(void)
         DEBUG_PUTS("'\n");
 		break;
 	case 4:		// SO_COSTUME
-		//a->setActorCostume(arg);
-        DEBUG_PRINTF("   Set actor %u costume %u\n", act, arg);
+        actor_setCostume(act, arg);
 		break;
 	case 5:		// SO_TALK_COLOR
         //a->_talkColor = arg;
-        DEBUG_PRINTF("   Set actor %u talk color %u\n", act, arg);
+        DEBUG_PRINTF("TODO: Set actor %u talk color %u\n", act, arg);
 		break;
 	default:
-		DEBUG_PRINTF("   Opcode %u not yet supported\n", opcode);
+		DEBUG_PRINTF("actorOps: opcode %u not yet supported\n", opcode);
         DEBUG_HALT;
 	}
 }
@@ -467,6 +443,74 @@ static void op_setVarRange(void)
 	} while (--a);
 }
 
+static void op_verbOps(void)
+{
+    uint8_t verb = fetchScriptByte();
+	uint8_t slot, state;
+
+	switch (verb) {
+	case 0:		// SO_DELETE_VERBS
+		slot = getVarOrDirectByte(PARAM_1) + 1;
+		// assert(0 < slot && slot < _numVerbs);
+		// killVerb(slot);
+		break;
+
+	case 0xFF:	// Verb On/Off
+		verb = fetchScriptByte();
+		state = fetchScriptByte();
+		//slot = getVerbSlot(verb, 0);
+		// _verbs[slot].curmode = state;
+		break;
+
+	default: {	// New Verb
+		int x = fetchScriptByte() * 8;
+		int y = fetchScriptByte() * 8;
+		slot = getVarOrDirectByte(PARAM_1) + 1;
+		int prep = fetchScriptByte(); // Only used in V1?
+		// V1 Maniac verbs are relative to the 'verb area' - under the sentence
+        // x += 8;
+
+		// VerbSlot *vs;
+		// assert(0 < slot && slot < _numVerbs);
+
+		// vs = &_verbs[slot];
+		// vs->verbid = verb;
+        // vs->color = 1;
+        // vs->hicolor = 1;
+        // vs->dimcolor = 1;
+		// vs->type = kTextVerbType;
+		// vs->charset_nr = _string[0]._default.charset;
+		// vs->curmode = 1;
+		// vs->saveid = 0;
+		// vs->key = 0;
+		// vs->center = 0;
+		// vs->imgindex = 0;
+		// vs->prep = prep;
+
+		// vs->curRect.left = x;
+		// vs->curRect.top = y;
+
+        // static const char keyboard[] = {
+        //         'q','w','e','r',
+        //         'a','s','d','f',
+        //         'z','x','c','v'
+        //     };
+        // if (1 <= slot && slot <= ARRAYSIZE(keyboard))
+        //     vs->key = keyboard[slot - 1];
+		// }
+
+        // skip the name
+        while (fetchScriptByte())
+            ;
+        }
+		break;
+	}
+
+	// // Force redraw of the modified verb slot
+	// drawVerb(slot, 0);
+	// verbMouseOver(0);
+}
+
 static void op_breakHere(void)
 {
     //DEBUG_PUTS("breakHere\n");
@@ -508,9 +552,7 @@ static void op_delay(void)
 
 static void op_setCameraAt(void)
 {
-    // setCameraAtEx(getVarOrDirectByte(PARAM_1) * V12_X_MULTIPLIER);
-    DEBUG_PUTS("setCameraAt\n");
-    getVarOrDirectByte(PARAM_1);
+    camera_setX(getVarOrDirectByte(PARAM_1)/* * V12_X_MULTIPLIER*/);
 }
 
 static void op_isLessEqual(void)
@@ -522,13 +564,11 @@ static void op_isLessEqual(void)
 
 static void op_waitForActor(void)
 {
-    DEBUG_PUTS("waitForActor\n");
     uint8_t act = getVarOrDirectByte(PARAM_1);
-	// Actor *a = derefActor(act, "o2_waitForActor");
-	// if (a->_moving) {
-	// 	_scriptPointer -= 2;
-	// 	op_breakHere();
-	// }
+	if (actor_isMoving(act)) {
+		stack[curScript].offset -= 2;
+		op_breakHere();
+	}
 }
 
 static void op_stopSound(void)
@@ -557,28 +597,19 @@ static void op_startScript(void)
     //     if (VAR(120) == 1)
     //         return;
     // }
-    // // Script numbers are different in V0
-    // if (_game.version == 0 && script == 150) {
-    //     if (VAR(104) == 1)
-    //         return;
-    // }
     pushScript(script);
 }
 
 static void op_getActorX(void)
 {
 //    DEBUG_PUTS("getActorX\n");
-	uint8_t a;
 	getResultPos();
-
-	a = getVarOrDirectByte(PARAM_1);
-    setResult(0/*getObjX(actorToObj(a))*/);
+    setResult(actor_getX(getVarOrDirectByte(PARAM_1)));
 }
 
 static void op_isEqual(void)
 {
     uint8_t var = fetchScriptByte();
-//    DEBUG_PRINTF("isEqual Var%u\n", var);
 	uint16_t a = readVar(var);
 	uint16_t b = getVarOrDirectWord(PARAM_1);
 	jumpRelative(b == a);
@@ -586,9 +617,7 @@ static void op_isEqual(void)
 
 static void op_actorFollowCamera(void)
 {
-    DEBUG_PUTS("actorFollowCamera\n");
-    //actorFollowCamera(getVarOrDirectByte(0x80));
-    getVarOrDirectByte(0x80);
+    camera_followActor(getVarOrDirectByte(0x80));
 }
 
 static void op_beginOverride(void)
@@ -607,20 +636,19 @@ static void op_add(void)
 	uint16_t a;
 	getResultPos();
 	a = getVarOrDirectWord(PARAM_1);
-	//_scummVars[_resultVarNumber] += a;
+	scummVars[resultVarNumber] += a;
 }
 
 static void op_cursorCommand(void)
 {
-    DEBUG_PUTS("cursorCommand\n");
 	uint16_t cmd = getVarOrDirectWord(PARAM_1);
+	uint8_t state = cmd >> 8;
+
+	if (cmd & 0xFF) {
+		scummVars[VAR_CURSORSTATE] = cmd & 0xFF;
+	}
+
     // TODO
-	// byte state = cmd >> 8;
-
-	// if (cmd & 0xFF) {
-	// 	VAR(VAR_CURSORSTATE) = cmd & 0xFF;
-	// }
-
 	// setUserState(state);
 }
 
@@ -720,6 +748,7 @@ void executeScript(void)
 {
     while (curScript >= 0 && !exitFlag)
     {
+        DEBUG_PRINTF("EXEC %u %x\n", stack[curScript].id, stack[curScript].offset - 4);
         opcode = fetchScriptByte();
         switch (opcode)
         {
@@ -731,6 +760,9 @@ void executeScript(void)
             break;
         case 0x02:
             op_startMusic();
+            break;
+        case 0x05:
+            op_drawObject();
             break;
         case 0x07:
             op_setState08();
@@ -832,6 +864,9 @@ void executeScript(void)
             break;
         case 0x78:
             op_isGreater();
+            break;
+        case 0x7a:
+            op_verbOps();
             break;
         case 0x80:
             op_breakHere();

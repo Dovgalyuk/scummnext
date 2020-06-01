@@ -6,3 +6,4 @@ resource.c
 graphics.c
 actor.c
 room.c
+camera.c

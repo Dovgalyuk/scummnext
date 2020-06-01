@@ -2,16 +2,18 @@
 #include "debug.h"
 #include "resource.h"
 #include "graphics.h"
+#include "camera.h"
 
-static uint8_t currentRoom;
+uint8_t currentRoom;
+uint8_t roomWidth;
 
 static void setupRoomSubBlocks(void)
 {
     HROOM r = openRoom(currentRoom);
     uint16_t p = readWord(r);
     readWord(r);
-    uint16_t width = readWord(r) * 8;
-    uint16_t height = readWord(r) * 8;
+    roomWidth = readWord(r);
+    //uint16_t height = readWord(r) * 8;
     esx_f_seek(r, 20, ESX_SEEK_SET);
     uint8_t numObj = readByte(r);
     readByte(r);
@@ -30,7 +32,7 @@ static void setupRoomSubBlocks(void)
     // while (num_scripts--)
     // 	loadResource(rtScript, *ptr++);
 
-    DEBUG_PRINTF("Open room %u width %u height %u objects %u\n", currentRoom, width, height, numObj);
+    DEBUG_PRINTF("Open room %u width %u objects %u\n", currentRoom, roomWidth, numObj);
 
     decodeNESGfx(r);
 
@@ -125,6 +127,7 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 	// if (VAR_CAMERA_MAX_X != 0xFF)
 	// 	VAR(VAR_CAMERA_MAX_X) = _roomWidth - (_screenWidth / 2);
 
+    camera_setX(roomWidth / 2);
     // camera._mode = kNormalCameraMode;
     // camera._cur.y = camera._dest.y = _screenHeight / 2;
 

@@ -3,6 +3,8 @@
 
 #include "resource.h"
 
+#define SCREEN_WIDTH 32
+
 void initGraphics(void);
 
 void decodeNESTrTable(void);

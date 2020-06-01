@@ -2,39 +2,62 @@
 #include <arch/zxn/esxdos.h>
 #include "graphics.h"
 #include "resource.h"
+#include "camera.h"
+#include "room.h"
 #include "debug.h"
 
 #define TILEMAP_BASE 0x6000
 #define TILE_BASE 0x4000
 #define LINE_WIDTH 40
 #define LINE_BYTES (LINE_WIDTH * 2)
+#define LINE_GAP ((LINE_WIDTH - SCREEN_WIDTH) / 2)
 
 static uint8_t baseTilesCount;
 static uint16_t tilesCount;
 static uint8_t translationTable[256];
 
+#define RGB2NEXT(r, g, b) (((r) & 0xe0) | (((g) >> 3) & 0x1c) | ((b) >> 6)), \
+                          (((b) >> 5) & 1)
+
+
 static const uint8_t tableNESPalette[] = {
     /*    0x1D     */
-    0x24, 0x24, 0x24, 	0x00, 0x24, 0x92, 	0x00, 0x00, 0xDB, 	0x6D, 0x49, 0xDB,
-    0x92, 0x00, 0x6D, 	0xB6, 0x00, 0x6D, 	0xB6, 0x24, 0x00, 	0x92, 0x49, 0x00,
-    0x6D, 0x49, 0x00, 	0x24, 0x49, 0x00, 	0x00, 0x6D, 0x24, 	0x00, 0x92, 0x00,
-    0x00, 0x49, 0x49, 	0x00, 0x00, 0x00, 	0x00, 0x00, 0x00, 	0x00, 0x00, 0x00,
+    RGB2NEXT(0x24, 0x24, 0x24), RGB2NEXT(0x00, 0x24, 0x92),
+    RGB2NEXT(0x00, 0x00, 0xDB), RGB2NEXT(0x6D, 0x49, 0xDB),
+    RGB2NEXT(0x92, 0x00, 0x6D), RGB2NEXT(0xB6, 0x00, 0x6D), 	
+    RGB2NEXT(0xB6, 0x24, 0x00), RGB2NEXT(0x92, 0x49, 0x00),
+    RGB2NEXT(0x6D, 0x49, 0x00), RGB2NEXT(0x24, 0x49, 0x00),
+    RGB2NEXT(0x00, 0x6D, 0x24), RGB2NEXT(0x00, 0x92, 0x00),
+    RGB2NEXT(0x00, 0x49, 0x49), RGB2NEXT(0x00, 0x00, 0x00),
+    RGB2NEXT(0x00, 0x00, 0x00), RGB2NEXT(0x00, 0x00, 0x00),
 
-    0xB6, 0xB6, 0xB6, 	0x00, 0x6D, 0xDB, 	0x00, 0x49, 0xFF, 	0x92, 0x00, 0xFF,
-    0xB6, 0x00, 0xFF, 	0xFF, 0x00, 0x92, 	0xFF, 0x00, 0x00, 	0xDB, 0x6D, 0x00,
-    0x92, 0x6D, 0x00, 	0x24, 0x92, 0x00, 	0x00, 0x92, 0x00, 	0x00, 0xB6, 0x6D,
-                        /*    0x00     */
-    0x00, 0x92, 0x92, 	0x6D, 0x6D, 0x6D, 	0x00, 0x00, 0x00, 	0x00, 0x00, 0x00,
+    RGB2NEXT(0xB6, 0xB6, 0xB6), RGB2NEXT(0x00, 0x6D, 0xDB), 
+    RGB2NEXT(0x00, 0x49, 0xFF), RGB2NEXT(0x92, 0x00, 0xFF),
+    RGB2NEXT(0xB6, 0x00, 0xFF), RGB2NEXT(0xFF, 0x00, 0x92), 
+    RGB2NEXT(0xFF, 0x00, 0x00), RGB2NEXT(0xDB, 0x6D, 0x00),
+    RGB2NEXT(0x92, 0x6D, 0x00), RGB2NEXT(0x24, 0x92, 0x00), 
+    RGB2NEXT(0x00, 0x92, 0x00), RGB2NEXT(0x00, 0xB6, 0x6D),
+                                /*    0x00     */
+    RGB2NEXT(0x00, 0x92, 0x92), RGB2NEXT(0x6D, 0x6D, 0x6D), 
+    RGB2NEXT(0x00, 0x00, 0x00), RGB2NEXT(0x00, 0x00, 0x00),
 
-    0xFF, 0xFF, 0xFF, 	0x6D, 0xB6, 0xFF, 	0x92, 0x92, 0xFF, 	0xDB, 0x6D, 0xFF,
-    0xFF, 0x00, 0xFF, 	0xFF, 0x6D, 0xFF, 	0xFF, 0x92, 0x00, 	0xFF, 0xB6, 0x00,
-    0xDB, 0xDB, 0x00, 	0x6D, 0xDB, 0x00, 	0x00, 0xFF, 0x00, 	0x49, 0xFF, 0xDB,
-    0x00, 0xFF, 0xFF, 	0x49, 0x49, 0x49, 	0x00, 0x00, 0x00, 	0x00, 0x00, 0x00,
+    RGB2NEXT(0xFF, 0xFF, 0xFF), RGB2NEXT(0x6D, 0xB6, 0xFF),
+    RGB2NEXT(0x92, 0x92, 0xFF), RGB2NEXT(0xDB, 0x6D, 0xFF),
+    RGB2NEXT(0xFF, 0x00, 0xFF), RGB2NEXT(0xFF, 0x6D, 0xFF),
+    RGB2NEXT(0xFF, 0x92, 0x00), RGB2NEXT(0xFF, 0xB6, 0x00),
+    RGB2NEXT(0xDB, 0xDB, 0x00), RGB2NEXT(0x6D, 0xDB, 0x00),
+    RGB2NEXT(0x00, 0xFF, 0x00), RGB2NEXT(0x49, 0xFF, 0xDB),
+    RGB2NEXT(0x00, 0xFF, 0xFF), RGB2NEXT(0x49, 0x49, 0x49),
+    RGB2NEXT(0x00, 0x00, 0x00), RGB2NEXT(0x00, 0x00, 0x00),
 
-    0xFF, 0xFF, 0xFF, 	0xB6, 0xDB, 0xFF, 	0xDB, 0xB6, 0xFF, 	0xFF, 0xB6, 0xFF,
-    0xFF, 0x92, 0xFF, 	0xFF, 0xB6, 0xB6, 	0xFF, 0xDB, 0x92, 	0xFF, 0xFF, 0x49,
-    0xFF, 0xFF, 0x6D, 	0xB6, 0xFF, 0x49, 	0x92, 0xFF, 0x6D, 	0x49, 0xFF, 0xDB,
-    0x92, 0xDB, 0xFF, 	0x92, 0x92, 0x92, 	0x00, 0x00, 0x00, 	0x00, 0x00, 0x00
+    RGB2NEXT(0xFF, 0xFF, 0xFF), RGB2NEXT(0xB6, 0xDB, 0xFF),
+    RGB2NEXT(0xDB, 0xB6, 0xFF), RGB2NEXT(0xFF, 0xB6, 0xFF),
+    RGB2NEXT(0xFF, 0x92, 0xFF), RGB2NEXT(0xFF, 0xB6, 0xB6),
+    RGB2NEXT(0xFF, 0xDB, 0x92), RGB2NEXT(0xFF, 0xFF, 0x49),
+    RGB2NEXT(0xFF, 0xFF, 0x6D), RGB2NEXT(0xB6, 0xFF, 0x49),
+    RGB2NEXT(0x92, 0xFF, 0x6D), RGB2NEXT(0x49, 0xFF, 0xDB),
+    RGB2NEXT(0x92, 0xDB, 0xFF), RGB2NEXT(0x92, 0x92, 0x92),
+    RGB2NEXT(0x00, 0x00, 0x00), RGB2NEXT(0x00, 0x00, 0x00)
 };
 
 void initGraphics(void)
@@ -123,6 +146,7 @@ void initGraphics(void)
 
 void decodeNESTileData(uint8_t *dst, HROOM f, uint16_t len)
 {
+    uint8_t *p = dst;
     // decode NES tile data
     uint8_t count = readByte(f);
     uint8_t data = readByte(f);
@@ -172,7 +196,7 @@ void decodeNESTrTable(void)
 
 static void decodeNESTiles(uint8_t set)
 {
-    uint8_t base[4096];
+    static uint8_t base[4096];
     HROOM f = seekResource(&costumes[set]);
     uint16_t len = readWord(f);
     uint8_t count = readByte(f);
@@ -220,15 +244,14 @@ void decodeNESGfx(HROOM r)
 {
     uint8_t i, j;
     uint16_t n;
-    uint16_t width;
-    esx_f_seek(r, 0x4, ESX_SEEK_SET);
-    width = readWord(r);
+    // uint16_t width;
+    //esx_f_seek(r, 0x4, ESX_SEEK_SET);
+    // width = readWord(r);
     esx_f_seek(r, 0xa, ESX_SEEK_SET);
     uint16_t gdata = readWord(r);
     esx_f_seek(r, gdata, ESX_SEEK_SET);
     uint8_t tileset = readByte(r);
     DEBUG_PRINTF("decoding gdata %u tileset %u\n", gdata, tileset);
-
     decodeNESTiles(37 + tileset);
     // decode palette
     for (i = 0 ; i < 16 ; ++i)
@@ -248,7 +271,7 @@ void decodeNESGfx(HROOM r)
     {
         nametable[i][0] = nametable[i][1];
 		n = 0;
-		while (n < width)
+		while (n < roomWidth)
         {
             uint8_t next = readByte(r);
 			for (j = 0 ; j < (data & 0x7F) ; j++)
@@ -261,7 +284,7 @@ void decodeNESGfx(HROOM r)
 				next = readByte(r);
             data = next;
 		}
-		nametable[i][width + 2] = nametable[i][width + 3] = 0;
+		nametable[i][roomWidth + 2] = nametable[i][roomWidth + 3] = 0;
     }
     // decode attributes
     esx_f_seek(r, 0xc, ESX_SEEK_SET);
@@ -276,7 +299,7 @@ void decodeNESGfx(HROOM r)
             if (data & 0x80)
                 next = readByte(r);
         }
-		if (!(n & 7) && (width == 0x1C))
+		if (!(n & 7) && (roomWidth == 0x1C))
 			n += 8;
 		if (!(data & 0x80))
 			next = readByte(r);
@@ -304,33 +327,59 @@ void handleDrawing(void)
     {
         // color(0-3) + palette offset(0-3)
         ZXN_WRITE_REG(0x40, (i & 3) | ((i & 0xc) << 2));
-        uint8_t c = palette[i] * 3;
-        uint8_t pal1 = (tableNESPalette[c] & 0xe0)
-            | ((tableNESPalette[c + 1] >> 3) & 0x1c)
-            | (tableNESPalette[c + 2] >> 6);
-        uint8_t pal2 = (tableNESPalette[c + 2] >> 5) & 1;
-        ZXN_WRITE_REG(0x44, pal1);
-        ZXN_WRITE_REG(0x44, pal2);
+        uint8_t c = palette[i] * 2;
+        // uint8_t pal1 = (tableNESPalette[c] & 0xe0)
+        //     | ((tableNESPalette[c + 1] >> 3) & 0x1c)
+        //     | (tableNESPalette[c + 2] >> 6);
+        // uint8_t pal2 = (tableNESPalette[c + 2] >> 5) & 1;
+        ZXN_WRITE_REG(0x44, tableNESPalette[c]);
+        ZXN_WRITE_REG(0x44, tableNESPalette[c + 1]);
         // DEBUG_PRINTF("Color%x %x (%x %x %x) (%x %x)\n",
         //     i, palette[i], tableNESPalette[c], tableNESPalette[c + 1],
         //     tableNESPalette[c + 2], pal1, pal2);
     }
-    // update picture
+    // update background picture
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + 4 * LINE_BYTES;
-    const uint8_t gap = 4 * 2;
+    uint8_t gap = LINE_GAP;
+    uint8_t offs;
+    uint8_t width = SCREEN_WIDTH;
+    if (roomWidth < SCREEN_WIDTH)
+    {
+        gap += (SCREEN_WIDTH - roomWidth) / 2;
+        offs = 0;
+        width = roomWidth;
+    }
+    else
+    {
+        uint8_t cam = cameraX;
+        if (cam < SCREEN_WIDTH / 2)
+            cam = SCREEN_WIDTH / 2;
+        else if (cam > roomWidth - SCREEN_WIDTH / 2)
+            cam = roomWidth - SCREEN_WIDTH / 2;
+        offs = cam - SCREEN_WIDTH / 2;
+    }
+
+    // TODO: clear the border
+    
+    gap *= 2;
+    //DEBUG_PRINTF("cameraX=%u roomWidth=%u offs=%u gap=%u\n", cameraX, roomWidth, offs, gap);
     for (i = 0 ; i < 16 ; ++i)
     {
         screen += gap;
-        for (j = 4 ; j < LINE_WIDTH - 4 ; ++j)
+        for (j = 0 ; j < width ; ++j)
         {
-            uint8_t x = j - 2;
-            uint8_t y = i;
+            uint8_t x = j + 4;
+            uint8_t y = i + 4;
             uint8_t attr = (attributes[((y << 2) & 0x30) | ((x >> 2) & 0xF)]
                 >> (((y & 2) << 1) | (x & 2))) & 0x3;
-            *screen++ = nametable[i][j - 2];
+            /* 2 empty cells at the beginning */
+            *screen++ = nametable[i][offs + j + 2];
             *screen++ = attr << 4;
         }
         screen += gap;
     }
+
+    // draw actors
+
     //DEBUG_HALT;
 }

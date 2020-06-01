@@ -4,6 +4,8 @@
 #include "resource.h"
 #include "script.h"
 #include "graphics.h"
+#include "camera.h"
+#include "actor.h"
 
 const int _numGlobalObjects = 775;
 const int _numRooms = 55;
@@ -20,7 +22,6 @@ static const int v1MMNEScostTables[2][6] = {
 // costume 78 is a preposition list
 // costume 79 is unused but allocated, so the total is a nice even number :)
 
-int _numVariables = 800;				// 800
 int _numBitVariables = 4096;			// 2048
 int _numLocalObjects = 200;				// 200
 int _numArray = 50;
@@ -116,6 +117,8 @@ int main()
 
     while (1)
     {
+        actors_walk();
+        camera_move();
         processScript();
         handleDrawing();
     }

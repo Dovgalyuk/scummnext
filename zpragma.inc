@@ -1,10 +1,10 @@
-// move org to have more room for software sprites
+// code start address
 
-#pragma output CRT_ORG_CODE = 30000
+#pragma output CRT_ORG_CODE = 0x6a00
 
-// typical stack location when using sp1 sprite engine
+// stack location
 
-#pragma output REGISTER_SP  = 0xd000
+#pragma output REGISTER_SP  = 0x0
 
 // indicate we are not returning to basic, reduces crt size
 
@@ -12,11 +12,7 @@
 
 // control size of printf
 
-#pragma printf = "%u"
-
-// use a different font to be crazy
-
-#pragma redirect CRT_OTERM_FONT_8X8 = _font_8x8_clairsys
+//#pragma printf = "%u"
 
 // heap sizes
 

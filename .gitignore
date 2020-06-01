@@ -2,3 +2,5 @@ scummnext_CODE.bin
 scummnext_UNASSIGNED.bin
 scummnext.nex
 MM/*
+*.o
+zcc_opt.def
