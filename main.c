@@ -23,7 +23,6 @@ static const int v1MMNEScostTables[2][6] = {
 // costume 79 is unused but allocated, so the total is a nice even number :)
 
 int _numBitVariables = 4096;			// 2048
-int _numLocalObjects = 200;				// 200
 int _numArray = 50;
 int _numVerbs = 100;
 int _numNewNames = 50;
@@ -120,6 +119,8 @@ int main()
         actors_walk();
         camera_move();
         processScript();
+
         handleDrawing();
+        graphics_drawActors();
     }
 }

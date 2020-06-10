@@ -3,17 +3,7 @@
 #include "debug.h"
 #include "room.h"
 
-#define ACTOR_COUNT 25
-typedef struct Actor
-{
-    uint8_t room;
-    uint8_t x, y;
-    uint8_t destX, destY;
-    uint8_t moving;
-    uint8_t costume;
-} Actor;
-
-static Actor actors[ACTOR_COUNT];
+Actor actors[ACTOR_COUNT];
 
 ///////////////////////////////////////////////////////////////////////////////
 // Actor internals
@@ -131,6 +121,8 @@ void actor_setRoom(uint8_t actor, uint8_t room)
 {
     DEBUG_PRINTF("Put actor %u in room %u\n", actor, room);
     actors[actor].room = room;
+
+    graphics_updateCostumes();
 }
 
 void actor_put(uint8_t actor, uint8_t x, uint8_t y)
@@ -174,6 +166,8 @@ void actors_walk(void)
     for (i = 0 ; i < ACTOR_COUNT ; ++i)
     {
         if (actors[i].room == currentRoom && actors[i].moving)
+        {
             actor_walkStep(actors + i);
+        }
     }
 }

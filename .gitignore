@@ -1,6 +1,8 @@
 scummnext_CODE.bin
 scummnext_UNASSIGNED.bin
 scummnext.nex
+scummnext.map
 MM/*
 *.o
+*.lis
 zcc_opt.def

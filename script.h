@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "room.h"
+
 #define VAR_EGO 0
 #define VAR_CAMERA_POS_X 2
 #define VAR_HAVE_MSG 3
@@ -43,6 +45,7 @@
 extern uint16_t scummVars[];
 
 void runScript(uint8_t s);
+void runRoomScript(uint8_t room, uint16_t offs);
 void processScript(void);
 
 #endif

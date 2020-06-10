@@ -15,6 +15,8 @@ typedef struct Resource
 #define _numScripts 200
 //#define _numSounds 100
 
+#define READ_LE_UINT16(p) (*(uint16_t*)(p))
+
 extern Resource costumes[];
 extern Resource scripts[];
 

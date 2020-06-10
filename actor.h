@@ -3,6 +3,21 @@
 
 #include <stdint.h>
 
+typedef struct Actor
+{
+    uint8_t room;
+    uint8_t x, y;
+    uint8_t destX, destY;
+    uint8_t moving;
+    uint8_t costume;
+    // anchor sprite of the current view
+    uint8_t anchor;
+    int8_t ax, ay;
+} Actor;
+
+#define ACTOR_COUNT 25
+extern Actor actors[];
+
 void actors_walk(void);
 
 uint8_t actor_getX(uint8_t actor);

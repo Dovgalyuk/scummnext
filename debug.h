@@ -5,6 +5,7 @@
 #define DEBUG_PUTS(s) debug_puts(s)
 #define DEBUG_PRINTF(s, ...) debug_printf(s, __VA_ARGS__)
 #define DEBUG_HALT while(1)
+#define DEBUG_ASSERT(c) do { if (!(c)) { DEBUG_PUTS("ASSERT\n"); DEBUG_HALT; } } while (0)
 
 void debug_putc(char c);
 void debug_puts(const char *s);

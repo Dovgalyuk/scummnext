@@ -3,9 +3,12 @@
 #include "resource.h"
 #include "graphics.h"
 #include "camera.h"
+#include "object.h"
+#include "script.h"
 
 uint8_t currentRoom;
 uint8_t roomWidth;
+static uint16_t entryScriptOffs;
 
 static void setupRoomSubBlocks(void)
 {
@@ -20,9 +23,9 @@ static void setupRoomSubBlocks(void)
     uint8_t numSnd = readByte(r);
     uint8_t numScript = readByte(r);
     uint16_t exitOffs = readWord(r);
-    uint16_t entryOffs = readWord(r);
-    uint16_t exitLen = entryOffs - exitOffs;// + 4;
-    uint16_t entryLen = p - entryOffs;// + 4;
+    entryScriptOffs = readWord(r);
+    uint16_t exitLen = entryScriptOffs - exitOffs;// + 4;
+    uint16_t entryLen = p - entryScriptOffs;// + 4;
     // offset 28 - objects start here
 
     // then sound and scripts
@@ -35,6 +38,7 @@ static void setupRoomSubBlocks(void)
     DEBUG_PRINTF("Open room %u width %u objects %u\n", currentRoom, roomWidth, numObj);
 
     decodeNESGfx(r);
+    setupRoomObjects(r);
 
     closeRoom(r);
 }
@@ -115,7 +119,7 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
 	// initBGBuffers(_roomHeight);
 
-	// resetRoomObjects();
+	//resetRoomObjects();
 
 	// if (VAR_ROOM_WIDTH != 0xFF && VAR_ROOM_HEIGHT != 0xFF) {
 	// 	VAR(VAR_ROOM_WIDTH) = _roomWidth;
@@ -140,6 +144,11 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
 	// _egoPositioned = false;
 
+    if (entryScriptOffs)
+    {
+        // runEntryScript();
+        runRoomScript(room, entryScriptOffs);
+    }
     // runScript(5, 0, 0, 0);
 
 	// _doEffect = true;
