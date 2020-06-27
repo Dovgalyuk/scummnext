@@ -48,6 +48,8 @@ static void actor_walkStep(Actor *a)
 		}
 	}
 
+    DEBUG_PRINTF("Moving diff %x %x\n", diffX, diffY);
+
     // _targetFacing = getAngleFromPos(V12_X_MULTIPLIER*deltaXFactor, V12_Y_MULTIPLIER*deltaYFactor, false);
 
 	uint8_t distX = ABS(diffX);
@@ -58,13 +60,15 @@ static void actor_walkStep(Actor *a)
 	// 	return 0;
 	// }
 
-    if (deltaXFactor != 0) {
+    if (deltaXFactor != 0)
+    {
         if (deltaXFactor > 0)
             a->x += 1;
         else
             a->x -= 1;
     }
-    if (deltaYFactor != 0) {
+    if (deltaYFactor != 0)
+    {
         if (deltaYFactor > 0)
             a->y += 1;
         else
@@ -135,6 +139,7 @@ void actor_put(uint8_t actor, uint8_t x, uint8_t y)
 
 void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)
 {
+    DEBUG_PRINTF("Walk actor %u to %u, %u\n", actor, x, y);
     // abr = adjustXYToBeInBox(destX, destY);
 
 	// if (!isInCurrentRoom() && _vm->_game.version <= 6) {

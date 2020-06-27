@@ -120,7 +120,6 @@ int main()
         camera_move();
         processScript();
 
-        handleDrawing();
-        graphics_drawActors();
+        graphics_updateScreen();
     }
 }

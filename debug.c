@@ -67,6 +67,17 @@ void debug_printf(const char *s, ...)
                     debug_print_num(arg, 16);
                 }
                 break;
+            case 'd':
+                {
+                    int16_t arg = va_arg(ap, int16_t);
+                    if (arg < 0)
+                    {
+                        debug_putc('-');
+                        arg = -arg;
+                    }
+                    debug_print_num(arg, 10);
+                }
+                break;
             case 'c':
                 debug_putc(va_arg(ap, int8_t));
                 break;

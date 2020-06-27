@@ -23,9 +23,6 @@ enum {
     PARAM_3 = 0x20
 };
 
-#define V12_X_MULTIPLIER 8
-#define V12_Y_MULTIPLIER 2
-
 #define _numVariables 800
 
 static Frame stack[STACK_SIZE];

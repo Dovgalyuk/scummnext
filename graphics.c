@@ -11,6 +11,7 @@
 #define LINE_WIDTH 40
 #define LINE_BYTES (LINE_WIDTH * 2)
 #define LINE_GAP ((LINE_WIDTH - SCREEN_WIDTH) / 2)
+#define SCREEN_TOP 4
 
 static uint8_t baseTilesCount;
 static uint16_t tilesCount;
@@ -136,6 +137,16 @@ void initGraphics(void)
     {
         *p++ = i;
         *p++ = 0;
+    }
+
+    // reset all sprite attributes
+    for (i = 0 ; i < 128 ; ++i)
+    {
+        IO_SPRITE_SLOT = i;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
     }
 
     // // DEBUG_PUTS("End setup\n");
@@ -517,7 +528,7 @@ void decodeNESCostume(Actor *act)
 	uint8_t numSprites = costlens[offset + frame + 2] + 1;
     HROOM sprdata = seekResource(&costumes[costdata_id]);
     uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
-    DEBUG_PRINTF("decode costume offs=%u numspr=%u sproffs=%u Tiles: ", offset, numSprites, sprOffs);
+    DEBUG_PRINTF("decode costume offs=%u numspr=%u sproffs=%u\n", offset, numSprites, sprOffs);
     esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
 
 	// bool flipped = (newDirToOldDir(a->getFacing()) == 1);
@@ -526,6 +537,7 @@ void decodeNESCostume(Actor *act)
 
     uint8_t sprite = 0;
     act->anchor = sprite;
+    numSprites = 2;
 
     // setup anchor and relative sprite attributes and patterns
 
@@ -575,24 +587,32 @@ void decodeNESCostume(Actor *act)
         IO_SPRITE_SLOT = sprite;
         if (sprite == act->anchor)
         {
-            IO_SPRITE_ATTRIBUTE = x;
-            IO_SPRITE_ATTRIBUTE = y;
-            IO_SPRITE_ATTRIBUTE = 0;
-            IO_SPRITE_ATTRIBUTE = 0xc0 | (sprite & 0x3f);
             act->ax = x;
             act->ay = y;
+        }
+
+        x = x - act->ax;
+        y = y - act->ay;
+        IO_SPRITE_ATTRIBUTE = x;
+        IO_SPRITE_ATTRIBUTE = y;
+
+        if (sprite == act->anchor)
+        {
+            IO_SPRITE_ATTRIBUTE = x < 0 ? 1 : 0;
+            IO_SPRITE_ATTRIBUTE = 0xc0 | (sprite & 0x3f);
             // anchor 4-bit sprite
             IO_SPRITE_ATTRIBUTE = 0x80;
         }
         else
         {
-            IO_SPRITE_ATTRIBUTE = x - act->ax;
-            IO_SPRITE_ATTRIBUTE = y - act->ax;
             IO_SPRITE_ATTRIBUTE = 0;
             IO_SPRITE_ATTRIBUTE = 0xc0 | (sprite & 0x3f);
             // relative sprite
             IO_SPRITE_ATTRIBUTE = 0x40;
         }
+
+        DEBUG_PRINTF("Sprite %d tile=%d x=%d y=%d\n", sprite, tile, x, y);
+
         ++sprite;
 
 	// 	if (flipped) {
@@ -649,8 +669,6 @@ void decodeNESCostume(Actor *act)
 	// a->_cost.end[0] = _dataOffsets[2 * anim + 1];
 	// a->_cost.frame[0] = frame;
 
-    DEBUG_PUTS("\n");
-
     closeRoom(sprdata);
     closeRoom(src);
 }
@@ -666,11 +684,11 @@ void graphics_print(const char *s)
     }
 }
 
-void handleDrawing(void)
+void graphics_updateScreen(void)
 {
     uint8_t i, j;
     // update background picture
-    uint8_t *screen = (uint8_t*)TILEMAP_BASE + 4 * LINE_BYTES;
+    uint8_t *screen = (uint8_t*)TILEMAP_BASE + SCREEN_TOP * LINE_BYTES;
     uint8_t gap = LINE_GAP;
     uint8_t offs;
     uint8_t width = SCREEN_WIDTH;
@@ -711,6 +729,25 @@ void handleDrawing(void)
     }
 
     // draw actors
+    for (i = 0 ; i < ACTOR_COUNT ; ++i)
+    {
+        if (actors[i].room == currentRoom)
+        {
+            int16_t x = actors[i].x * V12_X_MULTIPLIER + actors[i].ax - offs * 8;
+            if (x < 0 || x > SCREEN_WIDTH * 8)
+                continue;
+            x += gap * (8 / 2) + 2 * 8;
+            uint8_t y = actors[i].y * V12_Y_MULTIPLIER + actors[i].ay + SCREEN_TOP * 8;
+            IO_SPRITE_SLOT = actors[i].anchor;
+            IO_SPRITE_ATTRIBUTE = x;
+            IO_SPRITE_ATTRIBUTE = y;
+            IO_SPRITE_ATTRIBUTE = (x >> 8) & 1;
+            IO_SPRITE_ATTRIBUTE = 0x80 | actors[i].anchor;
+            DEBUG_PRINTF("Actor %u anchor %u x=%u y=%u\n", i, actors[i].anchor, x, y);
+            //graphics_drawActor(actors + i);
+            //a->animateCostume();
+        }
+    }
 
     //DEBUG_HALT;
 }
@@ -721,22 +758,6 @@ void graphics_drawObject(Object *obj)
         return;
     // TODO: room?
     decodeNESObject(obj);
-}
-
-void graphics_drawActors(void)
-{
-    uint8_t i;
-    for (i = 0 ; i < ACTOR_COUNT ; ++i)
-    {
-        if (actors[i].room == currentRoom)
-        {
-            IO_SPRITE_SLOT = actors[i].anchor;
-            IO_SPRITE_ATTRIBUTE = actors[i].x + actors[i].ax;
-            IO_SPRITE_ATTRIBUTE = actors[i].y + actors[i].ay;
-            //graphics_drawActor(actors + i);
-            //a->animateCostume();
-        }
-    }
 }
 
 void graphics_updateCostumes(void)
