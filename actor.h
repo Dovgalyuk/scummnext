@@ -10,6 +10,8 @@ typedef struct Actor
     uint8_t destX, destY;
     uint8_t moving;
     uint8_t costume;
+    uint8_t frame;
+    uint8_t curpos;
     // anchor sprite of the current view
     uint8_t anchor;
     int8_t ax, ay;
@@ -28,5 +30,6 @@ void actor_setCostume(uint8_t actor, uint8_t costume);
 void actor_put(uint8_t actor, uint8_t x, uint8_t y);
 void actor_talk(uint8_t actor, const char *s);
 void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y);
+void actor_animate(uint8_t actor, uint8_t anim);
 
 #endif

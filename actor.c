@@ -48,7 +48,7 @@ static void actor_walkStep(Actor *a)
 		}
 	}
 
-    DEBUG_PRINTF("Moving diff %x %x\n", diffX, diffY);
+    //DEBUG_PRINTF("Moving diff %x %x\n", diffX, diffY);
 
     // _targetFacing = getAngleFromPos(V12_X_MULTIPLIER*deltaXFactor, V12_Y_MULTIPLIER*deltaYFactor, false);
 
@@ -175,4 +175,16 @@ void actors_walk(void)
             actor_walkStep(actors + i);
         }
     }
+}
+
+void actor_animate(uint8_t actor, uint8_t anim)
+{
+    // TODO: different commands and directions from void Actor::animateActor(int anim)
+
+    // then void Actor::startAnimActor(int f = anim/4)
+    // _animProgress = 0;
+    // _needRedraw = true;
+    // _cost.animCounter = 0;
+	actors[actor].frame = anim / 4;
+    actors[actor].curpos = 0;
 }

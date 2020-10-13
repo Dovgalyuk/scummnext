@@ -288,12 +288,11 @@ static void op_resourceRoutines(void)
 
 static void op_animateActor(void)
 {
-    DEBUG_PUTS("animateActor\n");
 	uint8_t act = getVarOrDirectByte(PARAM_1);
 	uint8_t anim = getVarOrDirectByte(PARAM_2);
+    DEBUG_PRINTF("animateActor %u %u\n", act, anim);
 
-	// Actor *a = derefActor(act, "o5_animateActor");
-	// a->animateActor(anim);
+	actor_animate(act, anim);
 }
 
 static void op_panCameraTo(void)

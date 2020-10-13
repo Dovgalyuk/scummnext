@@ -13,6 +13,9 @@
 #define LINE_GAP ((LINE_WIDTH - SCREEN_WIDTH) / 2)
 #define SCREEN_TOP 4
 
+#define PAL_SPRITES 0x20
+#define PAL_TILES   0x30
+
 static uint8_t baseTilesCount;
 static uint16_t tilesCount;
 static uint8_t translationTable[256];
@@ -91,6 +94,8 @@ void initGraphics(void)
     ZXN_WRITE_REG(0x6C, 0);
     // transparency index
     //ZXN_WRITE_REG(0x4C, 0);
+    // sprite transparency index
+    ZXN_WRITE_REG(0x4B, 0);
     // disable ULA
     ZXN_WRITE_REG(0x68, 0x80);
 
@@ -246,52 +251,52 @@ static void setTiles(uint16_t count)
     }
 }
 
-static void setSprites(uint16_t count)
-{
-    DEBUG_PRINTF("Setup %u sprites\n", count);
-    uint8_t i;
-    // converts 8x8 NES sprites to 16x16 ZX Next
-    if (count > 128)
-        count = 128;
-    IO_SPRITE_SLOT = 0;
-    for (uint16_t c = 0 ; c < count ; ++c)
-    {
-        // send pattern
-        for (i = 0 ; i < 8 ; ++i)
-        {
-            uint8_t c0 = tileBuf[c * 16 + i];
-            uint8_t c1 = tileBuf[c * 16 + i + 8];
-            for (uint8_t j = 0 ; j < 8 ; ++j)
-            {
-                uint8_t col1 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-                ++j;
-                uint8_t col2 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-                uint8_t b = (col1 << 4) | col2;
-                IO_SPRITE_PATTERN = b;
-            }
-            IO_SPRITE_PATTERN = 0x0;
-            IO_SPRITE_PATTERN = 0x0;
-            IO_SPRITE_PATTERN = 0x0;
-            IO_SPRITE_PATTERN = 0x0;
-        }
-        for (i = 0 ; i < 64 ; ++i)
-            IO_SPRITE_PATTERN = 0x0;
-    }
+// static void setSprites(uint16_t count)
+// {
+//     DEBUG_PRINTF("Setup %u sprites\n", count);
+//     uint8_t i;
+//     // converts 8x8 NES sprites to 16x16 ZX Next
+//     if (count > 128)
+//         count = 128;
+//     IO_SPRITE_SLOT = 0;
+//     for (uint16_t c = 0 ; c < count ; ++c)
+//     {
+//         // send pattern
+//         for (i = 0 ; i < 8 ; ++i)
+//         {
+//             uint8_t c0 = tileBuf[c * 16 + i];
+//             uint8_t c1 = tileBuf[c * 16 + i + 8];
+//             for (uint8_t j = 0 ; j < 8 ; ++j)
+//             {
+//                 uint8_t col1 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
+//                 ++j;
+//                 uint8_t col2 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
+//                 uint8_t b = (col1 << 4) | col2;
+//                 IO_SPRITE_PATTERN = b;
+//             }
+//             IO_SPRITE_PATTERN = 0x0;
+//             IO_SPRITE_PATTERN = 0x0;
+//             IO_SPRITE_PATTERN = 0x0;
+//             IO_SPRITE_PATTERN = 0x0;
+//         }
+//         for (i = 0 ; i < 64 ; ++i)
+//             IO_SPRITE_PATTERN = 0x0;
+//     }
 
-    // for (i = 0 ; i < 128 ; ++i)
-    // {
-    //     // send attributes
-    //     IO_SPRITE_SLOT = i;
-    //     IO_SPRITE_ATTRIBUTE = (i & 0xf) * 17; // x
-    //     IO_SPRITE_ATTRIBUTE = (i & 0xf0); // y
-    //     IO_SPRITE_ATTRIBUTE = 0;
-    //     IO_SPRITE_ATTRIBUTE = 0xc0 | (i & 0x3f);
-    //     IO_SPRITE_ATTRIBUTE = 0x80 | (i & 0x40); // anchor 4-bit sprite
-    // }
+//     // for (i = 0 ; i < 128 ; ++i)
+//     // {
+//     //     // send attributes
+//     //     IO_SPRITE_SLOT = i;
+//     //     IO_SPRITE_ATTRIBUTE = (i & 0xf) * 17; // x
+//     //     IO_SPRITE_ATTRIBUTE = (i & 0xf0); // y
+//     //     IO_SPRITE_ATTRIBUTE = 0;
+//     //     IO_SPRITE_ATTRIBUTE = 0xc0 | (i & 0x3f);
+//     //     IO_SPRITE_ATTRIBUTE = 0x80 | (i & 0x40); // anchor 4-bit sprite
+//     // }
 
-    // sprite transparency register
-    ZXN_WRITE_REG(0x4b, 0);
-}
+//     // sprite transparency register
+//     ZXN_WRITE_REG(0x4b, 0);
+// }
 
 void decodeNESBaseTiles(void)
 {
@@ -315,7 +320,10 @@ static void updatePalette(HROOM r, uint8_t id)
 			c = 0x1D;
         c = c * 2;
         // color(0-3) + palette offset(0-3)
-        ZXN_WRITE_REG(0x40, (i & 3) | ((i & 0xc) << 2));
+        if (id == PAL_SPRITES)
+            ZXN_WRITE_REG(0x40, i);
+        else
+            ZXN_WRITE_REG(0x40, (i & 3) | ((i & 0xc) << 2));
         ZXN_WRITE_REG(0x44, tableNESPalette[c]);
         ZXN_WRITE_REG(0x44, tableNESPalette[c + 1]);
     }
@@ -335,7 +343,7 @@ void decodeNESGfx(HROOM r)
     DEBUG_PRINTF("decoding gdata %u tileset %u\n", gdata, tileset);
     setTiles(decodeNESTiles(tileBuf, 37 + tileset));
     // decode palette
-    updatePalette(r, 0x30);
+    updatePalette(r, PAL_TILES);
     // decode name table
     uint8_t data = readByte(r);
     for (i = 0 ; i < 16 ; ++i)
@@ -411,7 +419,7 @@ void graphics_loadCostumeSet(uint8_t n)
     // palette for sprites
     r = seekResource(&costumes[v1MMNEScostTables[n][5]]);
     readWord(r);
-    updatePalette(r, 0x20);
+    updatePalette(r, PAL_SPRITES);
     closeRoom(r);
 }
 
@@ -514,19 +522,26 @@ void decodeNESCostume(Actor *act)
 	// int anim;
 
     uint16_t size = readWord(src);
-    // read data offsets from r
+    // read data offsets from src
 
+    // limb = 0 for v2 scumm
 	// anim = 4 * cost.frame[limb] + newDirToOldDir(a->getFacing());
 	// frameNum = cost.curpos[limb];
 	// frame = src[src[2 * anim] + frameNum];
 
     // TODO
-    uint8_t frame = 0;
-    uint8_t anim = 0;
+    uint8_t anim = act->frame * 4;
+    uint8_t frameNum = act->curpos;
+    esx_f_seek(src, 2 * anim, ESX_SEEK_FWD);
+    uint8_t b = readByte(src);
+    esx_f_seek(src, b + frameNum - 2 * anim - 1, ESX_SEEK_FWD);
+    uint8_t frame = readByte(src);
 
 	uint16_t offset = READ_LE_UINT16(costdesc + v1MMNESLookup[act->costume] * 2 + 2);
 	uint8_t numSprites = costlens[offset + frame + 2] + 1;
     HROOM sprdata = seekResource(&costumes[costdata_id]);
+    // offset is the beginning
+    // in scummvm data is decoded in backwards direction, from the end
     uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
     DEBUG_PRINTF("decode costume offs=%u numspr=%u sproffs=%u\n", offset, numSprites, sprOffs);
     esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
@@ -537,7 +552,6 @@ void decodeNESCostume(Actor *act)
 
     uint8_t sprite = 0;
     act->anchor = sprite;
-    numSprites = 2;
 
     // setup anchor and relative sprite attributes and patterns
 
@@ -547,15 +561,17 @@ void decodeNESCostume(Actor *act)
         uint8_t d1 = readByte(sprdata);
         uint8_t d2 = readByte(sprdata);
 	// 	byte mask, tile, sprpal;
+        uint8_t mask;
+        uint8_t sprpal = 0;
 	    int8_t y, x;
 
-	// 	mask = (sprdata[0] & 0x80) ? 0x01 : 0x80;
+	    mask = (d0 & 0x80) ? 0x01 : 0x80;
 	    y = d0 << 1;
 	    y >>= 1;
 
 	    uint8_t tile = d1;
 
-	// 	sprpal = (sprdata[2] & 0x03) << 2;
+	 	sprpal = (d2 & 0x03) << 2;
 		x = d2;
 		x >>= 2;
 
@@ -567,13 +583,28 @@ void decodeNESCostume(Actor *act)
         {
             uint8_t c0 = t[i];
             uint8_t c1 = t[i + 8];
+            // tile data is ok
+            //DEBUG_PRINTF("tile line: %x %x\n", c0, c1);
+            uint8_t c = 0;
             for (uint8_t j = 0 ; j < 8 ; ++j)
             {
-                uint8_t col1 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-                ++j;
-                uint8_t col2 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-                uint8_t b = (col1 << 4) | col2;
-                IO_SPRITE_PATTERN = b;
+                uint8_t cc = ((c0 & mask) ? 1 : 0) | ((c1 & mask) ? 2 : 0);
+                // zero is transparent
+                if (cc)
+                    cc |= sprpal;
+                c = (c << 4) | cc;
+                if (j & 1)
+                {
+                    IO_SPRITE_PATTERN = c;
+                }
+
+				if (mask == 0x01) {
+					c0 >>= 1;
+					c1 >>= 1;
+				} else {
+					c0 <<= 1;
+					c1 <<= 1;
+				}
             }
             IO_SPRITE_PATTERN = 0x0;
             IO_SPRITE_PATTERN = 0x0;
@@ -581,6 +612,9 @@ void decodeNESCostume(Actor *act)
             IO_SPRITE_PATTERN = 0x0;
         }
         for (i = 0 ; i < 64 ; ++i)
+            IO_SPRITE_PATTERN = 0x0;
+        // second pattern, unused yet
+        for (i = 0 ; i < 128 ; ++i)
             IO_SPRITE_PATTERN = 0x0;
 
         // send attributes
@@ -614,6 +648,7 @@ void decodeNESCostume(Actor *act)
         DEBUG_PRINTF("Sprite %d tile=%d x=%d y=%d\n", sprite, tile, x, y);
 
         ++sprite;
+    }
 
 	// 	if (flipped) {
 	// 		mask = (mask == 0x80) ? 0x01 : 0x80;
@@ -629,29 +664,6 @@ void decodeNESCostume(Actor *act)
 	// 		continue;
 	// 	if ((_actorY + y < 0) || (_actorY + y + 8 >= _out.h))
 	// 		continue;
-
-	// 	for (int ty = 0; ty < 8; ty++) {
-	// 		byte c1 = _vm->_NESPatTable[0][tile * 16 + ty];
-	// 		byte c2 = _vm->_NESPatTable[0][tile * 16 + ty + 8];
-
-	// 		for (int tx = 0; tx < 8; tx++) {
-	// 			unsigned char c = ((c1 & mask) ? 1 : 0) | ((c2 & mask) ? 2 : 0) | sprpal;
-	// 			if (mask == 0x01) {
-	// 				c1 >>= 1;
-	// 				c2 >>= 1;
-	// 			} else {
-	// 				c1 <<= 1;
-	// 				c2 <<= 1;
-	// 			}
-	// 			if (!(c & 3))
-	// 				continue;
-	// 			int my = _actorY + y + ty;
-	// 			int mx = _actorX + x + tx;
-	// 			if (!(_zbuf && (maskBuf[my * _numStrips + mx / 8] & revBitMask(mx & 7))))
-	// 				*((byte *)_out.getBasePtr(mx, my)) = palette[c];
-	// 		}
-	// 	}
-	}
 
 	// DEBUG_PRINTF("Decode costume %u size=%u\n", costume, size);
     // for (uint8_t i = 0 ; i < 16 ; ++i)
@@ -742,8 +754,9 @@ void graphics_updateScreen(void)
             IO_SPRITE_ATTRIBUTE = x;
             IO_SPRITE_ATTRIBUTE = y;
             IO_SPRITE_ATTRIBUTE = (x >> 8) & 1;
-            IO_SPRITE_ATTRIBUTE = 0x80 | actors[i].anchor;
-            DEBUG_PRINTF("Actor %u anchor %u x=%u y=%u\n", i, actors[i].anchor, x, y);
+            IO_SPRITE_ATTRIBUTE = 0xc0 | actors[i].anchor;
+            IO_SPRITE_ATTRIBUTE = 0x80;
+            //DEBUG_PRINTF("Actor %u anchor %u x=%u y=%u\n", i, actors[i].anchor, x, y);
             //graphics_drawActor(actors + i);
             //a->animateCostume();
         }
