@@ -3,6 +3,17 @@
 
 #include <stdint.h>
 
+#define MAX_FRAMES 4
+
+typedef struct Animation {
+    uint8_t frames;
+    uint8_t anchors[MAX_FRAMES];
+    uint8_t curpos;
+    // anchor sprite of the current view
+    uint8_t anchor;
+    int8_t ax, ay;
+} Animation;
+
 typedef struct Actor
 {
     uint8_t room;
@@ -10,17 +21,17 @@ typedef struct Actor
     uint8_t destX, destY;
     uint8_t moving;
     uint8_t costume;
+    // costume frame
     uint8_t frame;
-    uint8_t curpos;
-    // anchor sprite of the current view
-    uint8_t anchor;
-    int8_t ax, ay;
+    // animation of the frame
+    Animation anim;
 } Actor;
 
 #define ACTOR_COUNT 25
 extern Actor actors[];
 
 void actors_walk(void);
+void actors_animate(void);
 
 uint8_t actor_getX(uint8_t actor);
 uint8_t actor_isMoving(uint8_t actor);

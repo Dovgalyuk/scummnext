@@ -270,8 +270,14 @@ static void op_drawObject(void)
 
 static void op_setState08(void)
 {
-    //DEBUG_PUTS("setState08\n");
-	int obj = getVarOrDirectWord(PARAM_1);
+ 	int j = getVarOrDirectWord(PARAM_1);
+    DEBUG_PRINTF("setState08 %u\n", j);
+
+    Object *obj = object_get(j);
+    DEBUG_ASSERT(obj);
+    // TODO: objectstate08?
+	graphics_drawObject(obj);
+
 	// putState(obj, getState(obj) | kObjectState_08);
 	// markObjectRectAsDirty(obj);
 	// clearDrawObjectQueue();

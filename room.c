@@ -5,6 +5,7 @@
 #include "camera.h"
 #include "object.h"
 #include "script.h"
+#include "box.h"
 
 uint8_t currentRoom;
 uint8_t roomWidth;
@@ -13,19 +14,19 @@ static uint16_t entryScriptOffs;
 static void setupRoomSubBlocks(void)
 {
     HROOM r = openRoom(currentRoom);
-    uint16_t p = readWord(r);
+    uint16_t size = readWord(r);
     readWord(r);
     roomWidth = readWord(r);
     //uint16_t height = readWord(r) * 8;
     esx_f_seek(r, 20, ESX_SEEK_SET);
     uint8_t numObj = readByte(r);
-    readByte(r);
+    uint8_t matrixOffs = readByte(r);
     uint8_t numSnd = readByte(r);
     uint8_t numScript = readByte(r);
     uint16_t exitOffs = readWord(r);
     entryScriptOffs = readWord(r);
     uint16_t exitLen = entryScriptOffs - exitOffs;// + 4;
-    uint16_t entryLen = p - entryScriptOffs;// + 4;
+    uint16_t entryLen = size - entryScriptOffs;// + 4;
     // offset 28 - objects start here
 
     // then sound and scripts
@@ -35,7 +36,21 @@ static void setupRoomSubBlocks(void)
     // while (num_scripts--)
     // 	loadResource(rtScript, *ptr++);
 
-    DEBUG_PRINTF("Open room %u width %u objects %u\n", currentRoom, roomWidth, numObj);
+    esx_f_seek(r, matrixOffs, ESX_SEEK_SET);
+    numBoxes = readByte(r);
+    DEBUG_ASSERT(numBoxes <= MAX_BOXES);
+    readBuffer(r, (uint8_t*)boxes, sizeof(Box) * numBoxes);
+
+    DEBUG_PRINTF("Open room %u width %u objects %u boxes %u\n", currentRoom, roomWidth, numObj, numBoxes);
+
+    int i;
+    for (i = 0 ; i < numBoxes ; ++i)
+    {
+        DEBUG_PRINTF("Box %d uy=%d ly=%d ulx=%d urx=%d llx=%d lrx=%d mask=%x flags=%x\n",
+            i, boxes[i].uy, boxes[i].ly, boxes[i].ulx, boxes[i].urx,
+            boxes[i].llx, boxes[i].lrx, boxes[i].mask, boxes[i].flags
+        );
+    }
 
     decodeNESGfx(r);
     setupRoomObjects(r);

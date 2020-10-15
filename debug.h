@@ -6,9 +6,11 @@
 #define DEBUG_PRINTF(s, ...) debug_printf(s, __VA_ARGS__)
 #define DEBUG_HALT while(1)
 #define DEBUG_ASSERT(c) do { if (!(c)) { DEBUG_PUTS("ASSERT\n"); DEBUG_HALT; } } while (0)
+#define DEBUG_DELAY(n) debug_delay(n)
 
 void debug_putc(char c);
 void debug_puts(const char *s);
 void debug_printf(const char *s, ...);
+void debug_delay(unsigned int n);
 
 #endif

@@ -116,10 +116,13 @@ int main()
 
     while (1)
     {
+        actors_animate();
         actors_walk();
         camera_move();
         processScript();
 
         graphics_updateScreen();
+
+        //DEBUG_DELAY(5000);
     }
 }

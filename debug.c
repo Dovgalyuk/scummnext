@@ -17,9 +17,9 @@ void debug_puts(const char *s)
         debug_putc(*s++);
 }
 
-static void debug_print_num(uint16_t num, int8_t base)
+static void debug_print_num(uint32_t num, uint8_t base)
 {
-    char buf[6];
+    char buf[12];
     int8_t i = 0;
     while (num)
     {
@@ -78,6 +78,17 @@ void debug_printf(const char *s, ...)
                     debug_print_num(arg, 10);
                 }
                 break;
+            case 'l':
+                {
+                    int32_t arg = va_arg(ap, int32_t);
+                    if (arg < 0)
+                    {
+                        debug_putc('-');
+                        arg = -arg;
+                    }
+                    debug_print_num(arg, 10);
+                }
+                break;
             case 'c':
                 debug_putc(va_arg(ap, int8_t));
                 break;
@@ -89,4 +100,11 @@ void debug_printf(const char *s, ...)
         }
     }
     va_end(ap);
+}
+
+uint8_t debug_data;
+void debug_delay(unsigned int n)
+{
+    while (n--)
+        ++debug_data;
 }

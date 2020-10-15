@@ -43,6 +43,16 @@ HROOM seekResource(Resource *res)
     return f;
 }
 
+void readBuffer(HROOM r, uint8_t *buf, uint16_t sz)
+{
+    esx_f_read(r, buf, sz);
+    while (sz--)
+    {
+        *buf++ ^= ENC_BYTE;
+    }
+}
+
+
 uint16_t readResource(HROOM r, uint8_t *buf, uint16_t sz)
 {
     uint16_t size = readWord(r);
@@ -53,12 +63,8 @@ uint16_t readResource(HROOM r, uint8_t *buf, uint16_t sz)
         DEBUG_HALT;
     }
     esx_f_seek(r, 2, ESX_SEEK_BWD);
-    esx_f_read(r, buf, size);
-    i = size;
-    while (i)
-    {
-        buf[--i] ^= ENC_BYTE;
-    }
+
+    readBuffer(r, buf, size);
 
     return size;
 }

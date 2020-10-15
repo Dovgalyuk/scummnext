@@ -22,6 +22,7 @@ extern Resource scripts[];
 
 uint8_t readByte(HROOM f);
 uint16_t readWord(HROOM f);
+void readBuffer(HROOM r, uint8_t *buf, uint16_t sz);
 
 HROOM openRoom(uint8_t i);
 void closeRoom(HROOM r);

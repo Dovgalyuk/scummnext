@@ -2,21 +2,33 @@
 #include "graphics.h"
 #include "debug.h"
 #include "room.h"
+#include "costume.h"
+#include "box.h"
+#include "helper.h"
 
 Actor actors[ACTOR_COUNT];
+
+enum MoveFlags {
+	MF_NEW_LEG = 1,
+	MF_IN_LEG = 2,
+	MF_TURN = 4,
+	MF_LAST_LEG = 8,
+	MF_FROZEN = 0x80
+};
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Actor internals
 ///////////////////////////////////////////////////////////////////////////////
 
-#define ABS(x) ((x) < 0 ? -(x) : (x))
 
 static void actor_walkStep(Actor *a)
 {
     const uint32_t speedy = 1;
     const uint32_t speedx = 1;
 	int8_t diffX, diffY;
-    // TODO: path
+    // TODO: split the path as in scummvm
+    //       
     uint8_t nextX = a->destX;
     uint8_t nextY = a->destY;
 	int32_t deltaXFactor, deltaYFactor;
@@ -24,6 +36,8 @@ static void actor_walkStep(Actor *a)
 	diffX = nextX - a->x;
 	diffY = nextY - a->y;
 	deltaYFactor = speedy << 16;
+
+    a->moving |= MF_IN_LEG;
 
 	if (diffY < 0)
 		deltaYFactor = -deltaYFactor;
@@ -48,17 +62,14 @@ static void actor_walkStep(Actor *a)
 		}
 	}
 
+    //DEBUG_PRINTF("factorX=%l factorY=%l\n", deltaXFactor, deltaYFactor);
+
     //DEBUG_PRINTF("Moving diff %x %x\n", diffX, diffY);
 
     // _targetFacing = getAngleFromPos(V12_X_MULTIPLIER*deltaXFactor, V12_Y_MULTIPLIER*deltaYFactor, false);
 
 	uint8_t distX = ABS(diffX);
 	uint8_t distY = ABS(diffY);
-
-	// if (ABS(_pos.x - _walkdata.cur.x) >= distX && ABS(_pos.y - _walkdata.cur.y) >= distY) {
-	// 	_moving &= ~MF_IN_LEG;
-	// 	return 0;
-	// }
 
     if (deltaXFactor != 0)
     {
@@ -113,6 +124,9 @@ void actor_setCostume(uint8_t actor, uint8_t costume)
 {
     DEBUG_PRINTF("Set actor %u costume %u\n", actor, costume);
     actors[actor].costume = costume;
+
+    // doesn't work on startup, fix it later
+    //costume_updateAll();
 }
 
 void actor_talk(uint8_t actor, const char *s)
@@ -126,7 +140,7 @@ void actor_setRoom(uint8_t actor, uint8_t room)
     DEBUG_PRINTF("Put actor %u in room %u\n", actor, room);
     actors[actor].room = room;
 
-    graphics_updateCostumes();
+    costume_updateAll();
 }
 
 void actor_put(uint8_t actor, uint8_t x, uint8_t y)
@@ -150,6 +164,12 @@ void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)
 	// 	return;
 	// }
 
+    // TODO: adjust coordinates
+
+    uint8_t xx = x;
+    uint8_t yy = y;
+    uint8_t box = boxes_adjust_xy(&xx, &yy);
+    DEBUG_PRINTF("Dest box %u x=%u y=%u\n", box, xx, yy);
 	// if (_vm->_game.version <= 2) {
 	// 	abr = adjustXYToBeInBox(abr.x, abr.y);
 	// 	if (_pos.x == abr.x && _pos.y == abr.y && (dir == -1 || _facing == dir))
@@ -157,7 +177,7 @@ void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)
 
 	actors[actor].destX = x;
 	actors[actor].destY = y;
-    actors[actor].moving = 1;
+    actors[actor].moving = MF_NEW_LEG;
 	// _walkdata.destbox = abr.box;
 	// _walkdata.destdir = dir;
 	// _walkdata.point3.x = 32000;
@@ -186,5 +206,22 @@ void actor_animate(uint8_t actor, uint8_t anim)
     // _needRedraw = true;
     // _cost.animCounter = 0;
 	actors[actor].frame = anim / 4;
-    actors[actor].curpos = 0;
+    actors[actor].anim.curpos = 0;
+
+    costume_updateAll();
+}
+
+void actors_animate(void)
+{
+    uint8_t i;
+    for (i = 0 ; i < ACTOR_COUNT ; ++i)
+    {
+        // TODO: any other flags?
+        if (actors[i].room == currentRoom)
+        {
+            ++actors[i].anim.curpos;
+            if (actors[i].anim.curpos >= actors[i].anim.frames)
+                actors[i].anim.curpos = 0;
+        }
+    }
 }
