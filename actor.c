@@ -21,89 +21,167 @@ enum MoveFlags {
 // Actor internals
 ///////////////////////////////////////////////////////////////////////////////
 
+static void actor_setBox(Actor *a, uint8_t box)
+{
+    a->walkbox = box;
+    // setupActorScale();
+}
 
-static void actor_walkStep(Actor *a)
+static void actor_calcMovementFactor(Actor *a, uint8_t nextX, uint8_t nextY)
 {
     const uint32_t speedy = 1;
     const uint32_t speedx = 1;
-	int8_t diffX, diffY;
-    // TODO: split the path as in scummvm
-    //       
-    uint8_t nextX = a->destX;
-    uint8_t nextY = a->destY;
-	int32_t deltaXFactor, deltaYFactor;
+    int8_t diffX, diffY;
 
-	diffX = nextX - a->x;
-	diffY = nextY - a->y;
-	deltaYFactor = speedy << 16;
+    if (a->x == nextX && a->y == nextY)
+        return;
 
-    a->moving |= MF_IN_LEG;
+    diffX = nextX - a->x;
+    diffY = nextY - a->y;
+    a->deltaYFactor = speedy << 16;
 
-	if (diffY < 0)
-		deltaYFactor = -deltaYFactor;
+    if (diffY < 0)
+        a->deltaYFactor = -a->deltaYFactor;
 
-	deltaXFactor = deltaYFactor * diffX;
-	if (diffY != 0) {
-		deltaXFactor /= diffY;
-	} else {
-		deltaYFactor = 0;
-	}
+    a->deltaXFactor = a->deltaYFactor * diffX;
+    if (diffY != 0) {
+        a->deltaXFactor /= diffY;
+    } else {
+        a->deltaYFactor = 0;
+    }
 
-	if (ABS(deltaXFactor) > (speedx << 16))	{
-		deltaXFactor = speedx << 16;
-		if (diffX < 0)
-			deltaXFactor = -deltaXFactor;
+    if (ABS(a->deltaXFactor) > (speedx << 16))	{
+        a->deltaXFactor = speedx << 16;
+        if (diffX < 0)
+            a->deltaXFactor = -a->deltaXFactor;
 
-		deltaYFactor = deltaXFactor * diffY;
-		if (diffX != 0) {
-			deltaYFactor /= diffX;
-		} else {
-			deltaXFactor = 0;
-		}
-	}
+        a->deltaYFactor = a->deltaXFactor * diffY;
+        if (diffX != 0) {
+            a->deltaYFactor /= diffX;
+        } else {
+            a->deltaXFactor = 0;
+        }
+    }
+
+    a->curX = a->x;
+    a->curY = a->y;
+    a->nextX = nextX;
+    a->nextY = nextY;
+
+    // _targetFacing = getAngleFromPos(V12_X_MULTIPLIER*deltaXFactor, V12_Y_MULTIPLIER*deltaYFactor, false);
+}
+
+static void actor_walkStep(Actor *a)
+{
+    // nextFacing = updateActorDirection(true);
+    if (!(a->moving & MF_IN_LEG)/* || _facing != nextFacing*/)
+    {
+    //     if (_walkFrame != _frame || _facing != nextFacing) {
+    //         startWalkAnim(1, nextFacing);
+    //     }
+        a->moving |= MF_IN_LEG;
+    }
+
+    if (a->walkbox != a->curbox && box_checkXYInBounds(a->curbox, a->x, a->y))
+    {
+    	actor_setBox(a, a->curbox);
+    }
 
     //DEBUG_PRINTF("factorX=%l factorY=%l\n", deltaXFactor, deltaYFactor);
 
-    //DEBUG_PRINTF("Moving diff %x %x\n", diffX, diffY);
-
     // _targetFacing = getAngleFromPos(V12_X_MULTIPLIER*deltaXFactor, V12_Y_MULTIPLIER*deltaYFactor, false);
 
-	uint8_t distX = ABS(diffX);
-	uint8_t distY = ABS(diffY);
+	uint8_t distX = ABS(a->nextX - a->curX);
+	uint8_t distY = ABS(a->nextY - a->curY);
 
-    if (deltaXFactor != 0)
+	if (ABS(a->x - a->curX) >= distX && ABS(a->y - a->curY) >= distY) {
+		a->moving &= ~MF_IN_LEG;
+		return;
+	}
+
+    // DEBUG_PRINTF("Moving diff %d %d\n", diffX, diffY);
+
+    if (a->deltaXFactor != 0)
     {
-        if (deltaXFactor > 0)
+        if (a->deltaXFactor > 0)
             a->x += 1;
         else
             a->x -= 1;
     }
-    if (deltaYFactor != 0)
+    if (a->deltaYFactor != 0)
     {
-        if (deltaYFactor > 0)
+        if (a->deltaYFactor > 0)
             a->y += 1;
         else
             a->y -= 1;
     }
 
-    if (distX == 0 && distY == 0)
-    {
-        // TODO: moving phase support
-        a->moving = 0;
+    if (ABS(a->x - a->curX) > distX) {
+        a->x = a->nextX;
     }
 
-	// if (ABS(a->x - _walkdata.cur.x) > distX) {
-	// 	a->x = _walkdata.next.x;
-	// }
+    if (ABS(a->y - a->curY) > distY) {
+        a->y = a->nextY;
+    }
 
-	// if (ABS(a->y - _walkdata.cur.y) > distY) {
-	// 	a->y = _walkdata.next.y;
-	// }
+    if (a->x == a->nextX && a->y == a->nextY)
+        a->moving &= ~MF_IN_LEG;
+}
 
-	// if ((_vm->_game.version <= 2 || (_vm->_game.version >= 4 && _vm->_game.version <= 6)) && _pos == _walkdata.next) {
-	// 	_moving &= ~MF_IN_LEG;
-	// 	return 0;
-	// }
+static void actor_walk(Actor *a)
+{
+    uint8_t foundX, foundY;
+    int8_t next_box;
+    // Common::Point foundPath, tmp;
+    // int new_dir, next_box;
+
+    // if (_moving & MF_TURN) {
+    //     new_dir = updateActorDirection(false);
+    //     if (_facing != new_dir) {
+    //         setDirection(new_dir);
+    //     } else {
+    //         _moving = 0;
+    //     }
+    //     return;
+    // }
+
+    if (a->moving & MF_IN_LEG) {
+        actor_walkStep(a);
+    } else {
+        if (a->moving & MF_LAST_LEG) {
+            a->moving = 0;
+            // startAnimActor(_standFrame);
+            // if (_targetFacing != _walkdata.destdir)
+            //     turnToDirection(_walkdata.destdir);
+        } else {
+            actor_setBox(a, a->curbox);
+            if (a->walkbox == a->destbox) {
+                foundX = a->destX;
+                foundY = a->destY;
+                a->moving |= MF_LAST_LEG;
+            } else {
+                next_box = boxes_getNext(a->walkbox, a->destbox);
+                if (next_box < 0) {
+                    a->moving |= MF_LAST_LEG;
+                    return;
+                }
+
+                // Can't walk through locked boxes
+                // int flags = _vm->getBoxFlags(next_box);
+                // if ((flags & kBoxLocked) && !((flags & kBoxPlayerOnly) && !isPlayer())) {
+                //     a->moving |= MF_LAST_LEG;
+                // }
+
+                a->curbox = next_box;
+
+                uint8_t tx, ty;
+                box_getClosestPtOnBox(a->curbox, a->x, a->y, &tx, &ty);
+                box_getClosestPtOnBox(a->walkbox, tx, ty, &foundX, &foundY);
+            }
+            actor_calcMovementFactor(a, foundX, foundY);
+            actor_walkStep(a);
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -154,7 +232,8 @@ void actor_put(uint8_t actor, uint8_t x, uint8_t y)
 void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)
 {
     DEBUG_PRINTF("Walk actor %u to %u, %u\n", actor, x, y);
-    // abr = adjustXYToBeInBox(destX, destY);
+
+    // TODO: jump to this room
 
 	// if (!isInCurrentRoom() && _vm->_game.version <= 6) {
 	// 	_pos.x = abr.x;
@@ -164,24 +243,24 @@ void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)
 	// 	return;
 	// }
 
-    // TODO: adjust coordinates
-
     uint8_t xx = x;
     uint8_t yy = y;
-    uint8_t box = boxes_adjust_xy(&xx, &yy);
+    uint8_t box = boxes_adjustXY(&xx, &yy);
     DEBUG_PRINTF("Dest box %u x=%u y=%u\n", box, xx, yy);
-	// if (_vm->_game.version <= 2) {
-	// 	abr = adjustXYToBeInBox(abr.x, abr.y);
+
 	// 	if (_pos.x == abr.x && _pos.y == abr.y && (dir == -1 || _facing == dir))
 	// 		return;
+    if (actors[actor].x == xx && actors[actor].y == yy) {
+        return;
+    }
 
-	actors[actor].destX = x;
-	actors[actor].destY = y;
+	actors[actor].destX = xx;
+	actors[actor].destY = yy;
     actors[actor].moving = MF_NEW_LEG;
-	// _walkdata.destbox = abr.box;
+    actors[actor].destbox = box;
+    actors[actor].curbox = actors[actor].walkbox;
 	// _walkdata.destdir = dir;
 	// _walkdata.point3.x = 32000;
-	// _walkdata.curbox = _walkbox;
     //_moving = (_moving & ~(MF_LAST_LEG | MF_IN_LEG)) | MF_NEW_LEG;
 }
 
@@ -192,7 +271,7 @@ void actors_walk(void)
     {
         if (actors[i].room == currentRoom && actors[i].moving)
         {
-            actor_walkStep(actors + i);
+            actor_walk(actors + i);
         }
     }
 }

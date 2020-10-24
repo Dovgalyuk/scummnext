@@ -1,5 +1,6 @@
 CFILES = $(wildcard *.c)
-OFILES = $(CFILES:.c=.o)
+ASMFILES = $(wildcard *.asm)
+OFILES = $(CFILES:.c=.o) $(ASMFILES:.asm=.o)
 
 PROGRAM = scummnext.nex
 
@@ -10,6 +11,10 @@ scummnext.nex: $(OFILES)
 	zcc +scumm -m -o $(basename $@) $(OFILES) -clib=sdcc_iy -v -create-app -subtype=nex -pragma-include:zpragma.inc
 
 %.o: %.c
+#	zcc +zxn -o $@ -c $^ -v -SO3 -clib=sdcc_iy --max-allocs-per-node200000 -subtype=nex -Izxn --list
+	zcc +scumm -o $@ -c $^ -v -SO3 --max-allocs-per-node200000 -subtype=scumm -Izxn --list
+
+%.o: %.asm
 #	zcc +zxn -o $@ -c $^ -v -SO3 -clib=sdcc_iy --max-allocs-per-node200000 -subtype=nex -Izxn --list
 	zcc +scumm -o $@ -c $^ -v -SO3 --max-allocs-per-node200000 -subtype=scumm -Izxn --list
 

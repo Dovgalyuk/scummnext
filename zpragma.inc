@@ -2,6 +2,10 @@
 
 #pragma output CRT_ORG_CODE = 0x6a00
 
+// pages for buffers
+#pragma output CRT_ORG_PAGE_2 = 0x0000
+#pragma output CRT_ORG_PAGE_3 = 0x2000
+
 // stack location
 
 #pragma output REGISTER_SP  = 0x0

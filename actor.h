@@ -18,8 +18,18 @@ typedef struct Actor
 {
     uint8_t room;
     uint8_t x, y;
+    
+    // movement parameters
     uint8_t destX, destY;
+    uint8_t nextX, nextY;
+    uint8_t curX, curY;
+   	int32_t deltaXFactor, deltaYFactor;
     uint8_t moving;
+    uint8_t walkbox;
+    uint8_t destbox;
+    uint8_t curbox;
+
+    // costume parameters
     uint8_t costume;
     // costume frame
     uint8_t frame;

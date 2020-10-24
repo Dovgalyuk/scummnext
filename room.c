@@ -37,19 +37,29 @@ static void setupRoomSubBlocks(void)
     // 	loadResource(rtScript, *ptr++);
 
     esx_f_seek(r, matrixOffs, ESX_SEEK_SET);
+    // boxes
     numBoxes = readByte(r);
     DEBUG_ASSERT(numBoxes <= MAX_BOXES);
     readBuffer(r, (uint8_t*)boxes, sizeof(Box) * numBoxes);
+    // boxes matrix
+    readBuffer(r, boxesMatrix, numBoxes * (numBoxes + 1));
 
     DEBUG_PRINTF("Open room %u width %u objects %u boxes %u\n", currentRoom, roomWidth, numObj, numBoxes);
 
-    int i;
+    int i, j;
     for (i = 0 ; i < numBoxes ; ++i)
     {
         DEBUG_PRINTF("Box %d uy=%d ly=%d ulx=%d urx=%d llx=%d lrx=%d mask=%x flags=%x\n",
             i, boxes[i].uy, boxes[i].ly, boxes[i].ulx, boxes[i].urx,
             boxes[i].llx, boxes[i].lrx, boxes[i].mask, boxes[i].flags
         );
+    }
+    uint8_t *ptr = boxesMatrix;
+    for (i = 0 ; i < numBoxes + 1 ; ++i)
+    {
+        for (j = 0 ; j < numBoxes ; ++j)
+            DEBUG_PRINTF("%d ", *ptr++);
+        DEBUG_PUTS("\n");
     }
 
     decodeNESGfx(r);

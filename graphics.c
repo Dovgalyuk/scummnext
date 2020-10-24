@@ -28,9 +28,12 @@ uint8_t costlens[279];
 uint8_t costoffs[556];
 // static uint8_t costdata[11234];
 uint8_t costdata_id;
-uint8_t spriteTiles[4096];
+//uint8_t spriteTiles[4096];
+extern uint8_t spriteTiles[];
 // this is temporary
-static uint8_t tileBuf[4096];
+//static uint8_t tileBuf[4096];
+//#define tileBuf ((uint8_t*)0x3000)
+extern uint8_t tileBuf[];
 
 #define RGB2NEXT(r, g, b) (uint8_t)(((r) & 0xe0) | (((g) >> 3) & 0x1c) | (((b) >> 6) & 0x3)), \
                           (((b) >> 5) & 1)
@@ -89,6 +92,8 @@ void initGraphics(void)
 {
     int i;
 
+    // disable layer2
+    //ZXN_WRITE_REG(0x69, 0x00);
     // enable tilemap with attributes
     ZXN_WRITE_REG(0x6B, 0x81);
     ZXN_WRITE_REG(0x6C, 0);
@@ -162,9 +167,9 @@ void initGraphics(void)
     // // DEBUG_PUTS("End setup\n");
 }
 
-static uint16_t decodeNESTileData(uint8_t *tileBuf, HROOM f, uint16_t len)
+static uint16_t decodeNESTileData(uint8_t *buf, HROOM f, uint16_t len)
 {
-    uint8_t *dst = tileBuf;
+    uint8_t *dst = buf;
     // decode NES tile data
     uint8_t count = readByte(f);
     uint8_t data = readByte(f);
@@ -201,7 +206,7 @@ static uint16_t decodeNESTileData(uint8_t *tileBuf, HROOM f, uint16_t len)
         }
 	}
 
-    return dst - tileBuf;
+    return dst - buf;
 }
 
 void decodeNESTrTable(void)

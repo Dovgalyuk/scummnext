@@ -67,6 +67,10 @@ uint16_t getWord(uint8_t *p)
 
 int main()
 {
+    // init memory bank 0-16k
+    ZXN_WRITE_MMU0(2);
+    ZXN_WRITE_MMU1(3);
+
     int i;
     HROOM f = openRoom(0);
 
