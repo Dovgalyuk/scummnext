@@ -141,7 +141,8 @@ uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
             if (nextSprite == anchor)
             {
                 IO_SPRITE_ATTRIBUTE = x < 0 ? 1 : 0;
-                IO_SPRITE_ATTRIBUTE = 0xc0 | (nextSprite & 0x3f);
+                // invisible yet
+                IO_SPRITE_ATTRIBUTE = 0x40 | (nextSprite & 0x3f);
                 // anchor 4-bit sprite
                 IO_SPRITE_ATTRIBUTE = 0x80;
             }

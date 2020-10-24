@@ -616,11 +616,7 @@ void graphics_updateScreen(void)
                     continue;
                 }
                 x += gap * 8;
-                // TODO: 32 is a magic number guessed from comet
-                x += 32;
                 uint8_t y = actors[i].y * V12_Y_MULTIPLIER + anim->ay + SCREEN_TOP * 8;
-                // TODO: 8 is a magic number guessed from comet
-                y -= 8;
                 IO_SPRITE_ATTRIBUTE = x;
                 IO_SPRITE_ATTRIBUTE = y;
                 IO_SPRITE_ATTRIBUTE = (x >> 8) & 1;

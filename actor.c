@@ -25,6 +25,7 @@ static void actor_setBox(Actor *a, uint8_t box)
 {
     a->walkbox = box;
     // setupActorScale();
+    DEBUG_PRINTF("Set box %u\n", box);
 }
 
 static void actor_calcMovementFactor(Actor *a, uint8_t nextX, uint8_t nextY)
@@ -224,9 +225,18 @@ void actor_setRoom(uint8_t actor, uint8_t room)
 void actor_put(uint8_t actor, uint8_t x, uint8_t y)
 {
     DEBUG_PRINTF("Put actor %u to %u, %u\n", actor, x, y);
-    actors[actor].x = x;
-    actors[actor].y = y;
-    actors[actor].moving = 0;
+    Actor *a = &actors[actor];
+    a->moving = 0;
+    a->x = x;
+    a->y = y;
+    if (a->room == currentRoom)
+    {
+        uint8_t box = boxes_adjustXY(&x, &y);
+        a->x = x;
+        a->y = y;
+        a->destbox = box;
+        actor_setBox(a, box);
+    }
 }
 
 void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)

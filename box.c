@@ -281,7 +281,7 @@ uint8_t boxes_adjustXY(uint8_t *px, uint8_t *py)
 		// if ((flags & kBoxInvisible) && !((flags & kBoxPlayerOnly) && !isPlayer()))
 		// 	continue;
         uint8_t foundX, foundY;
-        uint8_t dist = box_check_xy_in_bounds(&boxes[i], *px, *py, &foundX, &foundY);
+        uint8_t dist = box_check_xy_in_bounds(&boxes[i], x, y, &foundX, &foundY);
 		if (dist == 0) {
 			*px = foundX;
 			*py = foundY;
