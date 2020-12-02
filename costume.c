@@ -6,7 +6,7 @@
 #include "room.h"
 #include "debug.h"
 
-uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
+static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
 {
     // TODO: sprite and animation allocation
     Animation *animation = &act->anim;
@@ -31,7 +31,7 @@ uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
     uint8_t begin = readByte(src);
     uint8_t end = readByte(src);
     DEBUG_PRINTF("Decode animation of %u frames from %u\n", end, begin);
-    DEBUG_ASSERT(end <= MAX_FRAMES);
+    DEBUG_ASSERT(end <= MAX_FRAMES, "decodeNESCostume");
     esx_f_seek(src, begin - 2 * anim - 1, ESX_SEEK_FWD);
 
     // read all frames
@@ -84,46 +84,7 @@ uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
             x >>= 2;
 
             // setup tile
-            IO_SPRITE_SLOT = nextSprite;
-            uint8_t i;
-            uint8_t *t = &spriteTiles[tile * 16];
-            for (i = 0 ; i < 8 ; ++i)
-            {
-                uint8_t c0 = t[i];
-                uint8_t c1 = t[i + 8];
-                // tile data is ok
-                //DEBUG_PRINTF("tile line: %x %x\n", c0, c1);
-                uint8_t c = 0;
-                for (uint8_t j = 0 ; j < 8 ; ++j)
-                {
-                    uint8_t cc = ((c0 & mask) ? 1 : 0) | ((c1 & mask) ? 2 : 0);
-                    // zero is transparent
-                    if (cc)
-                        cc |= sprpal;
-                    c = (c << 4) | cc;
-                    if (j & 1)
-                    {
-                        IO_SPRITE_PATTERN = c;
-                    }
-
-                    if (mask == 0x01) {
-                        c0 >>= 1;
-                        c1 >>= 1;
-                    } else {
-                        c0 <<= 1;
-                        c1 <<= 1;
-                    }
-                }
-                IO_SPRITE_PATTERN = 0x0;
-                IO_SPRITE_PATTERN = 0x0;
-                IO_SPRITE_PATTERN = 0x0;
-                IO_SPRITE_PATTERN = 0x0;
-            }
-            for (i = 0 ; i < 64 ; ++i)
-                IO_SPRITE_PATTERN = 0x0;
-            // second pattern, unused yet
-            for (i = 0 ; i < 128 ; ++i)
-                IO_SPRITE_PATTERN = 0x0;
+            graphics_loadSpritePattern(nextSprite, tile, mask, sprpal);
 
             // send attributes
             IO_SPRITE_SLOT = nextSprite;
@@ -173,13 +134,31 @@ uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
 
 void costume_updateAll(void)
 {
+    // uint8_t i;
+    // for (i = 0 ; i < 64 ; ++i)
+    // {
+    //     graphics_loadSpritePattern(i, i, 0x80, 0);
+    //     // send attributes
+    //     IO_SPRITE_SLOT = i;
+    //     IO_SPRITE_ATTRIBUTE = (i & 0xf) << 4; // x
+    //     IO_SPRITE_ATTRIBUTE = (i & 0xf0) + 0x20; // y
+    //     IO_SPRITE_ATTRIBUTE = 0;
+    //     IO_SPRITE_ATTRIBUTE = 0xc0 | (i & 0x3f);
+    //     IO_SPRITE_ATTRIBUTE = 0x80 | (i & 0x40); // anchor 4-bit sprite
+    // }
+    // DEBUG_HALT;
+
+    // // we always need a sprite for the cursor
+    graphics_loadSpritePattern(SPRITE_CURSOR, 0xfe, 0x80, 0);
+
+    // decode costume sprites
     uint8_t i;
-    uint8_t nextSprite = 0;
+    uint8_t nextSprite = 1;
     for (i = 0 ; i < ACTOR_COUNT ; ++i)
     {
         if (actors[i].room == currentRoom)
         {
-            DEBUG_ASSERT(nextSprite <= 63);
+            DEBUG_ASSERT(nextSprite <= 63, "costume_updateAll");
             nextSprite = decodeNESCostume(&actors[i], nextSprite);
         }
     }

@@ -6,6 +6,8 @@
 #include "box.h"
 #include "helper.h"
 
+int8_t talkDelay;
+
 Actor actors[ACTOR_COUNT];
 
 enum MoveFlags {
@@ -211,6 +213,9 @@ void actor_setCostume(uint8_t actor, uint8_t costume)
 void actor_talk(uint8_t actor, const char *s)
 {
     // TODO: color
+    // TODO: variables
+    //_talkDelay += _msgCount * _defaultTalkDelay;
+    talkDelay = 60;
     graphics_print(s);
 }
 

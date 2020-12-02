@@ -125,7 +125,7 @@ static void closestPtOnLine(uint8_t sx, uint8_t sy, uint8_t ex, uint8_t ey,
 		*ox = x;
 		*oy = sy;
 	} else {
-        DEBUG_ASSERT(0);
+        DEBUG_ASSERT(0, "closestPtOnLine");
 		// const int dist = lxdiff * lxdiff + lydiff * lydiff;
 		// int a, b, c;
 		// if (ABS(lxdiff) > ABS(lydiff)) {
@@ -243,12 +243,12 @@ uint8_t box_getClosestPtOnBox(uint8_t b, uint8_t x, uint8_t y, uint8_t *outX, ui
 
 uint8_t box_checkXYInBounds(uint8_t b, uint8_t x, uint8_t y)
 {
-    DEBUG_ASSERT(b < MAX_BOXES);
+    DEBUG_ASSERT(b < MAX_BOXES, "box_checkXYInBounds");
     Box *box = &boxes[b];
 
     // TODO: support non-rectangular
-    DEBUG_ASSERT(box->ulx == box->llx);
-    DEBUG_ASSERT(box->urx == box->lrx);
+    DEBUG_ASSERT(box->ulx == box->llx, "box_checkXYInBounds");
+    DEBUG_ASSERT(box->urx == box->lrx, "box_checkXYInBounds");
 
 	// Quick check: If the x (resp. y) coordinate of the point is
 	// strictly smaller (bigger) than the x (y) coordinates of all

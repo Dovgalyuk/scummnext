@@ -8,6 +8,9 @@ _spriteTiles: defs 4096,0
 
 ; No more space
 
-SECTION PAGE_3
+SECTION PAGE_32
 
-; 0x2000 bytes left
+PUBLIC _scriptBytes
+_scriptBytes: defs 4096, 0
+
+; No more space

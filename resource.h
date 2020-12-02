@@ -29,5 +29,7 @@ void closeRoom(HROOM r);
 /* Opens a room and seeks to the beginning of the resource */
 HROOM seekResource(Resource *res);
 uint16_t readResource(HROOM r, uint8_t *buf, uint16_t sz);
+void seekToOffset(HROOM r, uint16_t offs);
+uint8_t readString(HROOM r, char *s);
 
 #endif

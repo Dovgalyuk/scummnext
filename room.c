@@ -39,7 +39,7 @@ static void setupRoomSubBlocks(void)
     esx_f_seek(r, matrixOffs, ESX_SEEK_SET);
     // boxes
     numBoxes = readByte(r);
-    DEBUG_ASSERT(numBoxes <= MAX_BOXES);
+    DEBUG_ASSERT(numBoxes <= MAX_BOXES, "setupRoomSubBlocks");
     readBuffer(r, (uint8_t*)boxes, sizeof(Box) * numBoxes);
     // boxes matrix
     readBuffer(r, boxesMatrix, numBoxes * (numBoxes + 1));
@@ -115,13 +115,12 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
     // }
     // setDirtyColors(0, 255);
 
-	// VAR(VAR_ROOM) = room;
 	// _fullRedraw = true;
 
 	// _res->increaseResourceCounters();
 
 	currentRoom = room;
-	// VAR(VAR_ROOM) = room;
+	scummVars[VAR_ROOM] = room;
 
     // _roomResource = room;
 
@@ -172,9 +171,11 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
     if (entryScriptOffs)
     {
         // runEntryScript();
-        runRoomScript(room, entryScriptOffs);
+        runRoomScript(-1, room, entryScriptOffs);
     }
-    // runScript(5, 0, 0, 0);
+
+    // this is for common rooms, should be run in parallel
+    runScript(5);
 
 	// _doEffect = true;
 }

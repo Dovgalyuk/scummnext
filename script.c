@@ -1,3 +1,4 @@
+#include <arch/zxn.h>
 #include <arch/zxn/esxdos.h>
 #include "script.h"
 #include "resource.h"
@@ -7,15 +8,20 @@
 #include "camera.h"
 #include "object.h"
 #include "graphics.h"
+#include "cursor.h"
+#include "verbs.h"
 
 typedef struct Frame
 {
+    uint8_t id;
     uint8_t room;
     uint16_t roomoffs;
     uint16_t offset;
+    uint32_t delay;
+    uint16_t resultVarNumber;
 } Frame;
 
-#define STACK_SIZE 4
+#define MAX_SCRIPTS 8
 
 enum {
     PARAM_1 = 0x80,
@@ -23,26 +29,59 @@ enum {
     PARAM_3 = 0x20
 };
 
+enum UserStates {
+	USERSTATE_SET_FREEZE      = 0x01,   // freeze scripts if USERSTATE_FREEZE_ON is set, unfreeze otherwise
+	USERSTATE_SET_CURSOR      = 0x02,   // shows cursor if USERSTATE_CURSOR_ON is set, hides it otherwise
+	USERSTATE_SET_IFACE       = 0x04,   // change user-interface (sentence-line, inventory, verb-area)
+	USERSTATE_FREEZE_ON       = 0x08,   // only interpreted if USERSTATE_SET_FREEZE is set
+	USERSTATE_CURSOR_ON       = 0x10,   // only interpreted if USERSTATE_SET_CURSOR is set
+	USERSTATE_IFACE_SENTENCE  = 0x20,   // only interpreted if USERSTATE_SET_IFACE is set
+	USERSTATE_IFACE_INVENTORY = 0x40,   // only interpreted if USERSTATE_SET_IFACE is set
+	USERSTATE_IFACE_VERBS     = 0x80    // only interpreted if USERSTATE_SET_IFACE is set
+};
+
 #define _numVariables 800
 
-static Frame stack[STACK_SIZE];
-uint16_t scummVars[_numVariables];
-static int8_t curScript = -1;
-static uint8_t scriptBytes[4096];
-static uint16_t resultVarNumber;
+static Frame stack[MAX_SCRIPTS];
+int16_t scummVars[_numVariables];
+static uint8_t curScript;
 static uint8_t opcode;
 static uint8_t exitFlag;
-static uint32_t delay;
 
-static void loadScriptBytes(void)
+// mapped in MMU1 to pages 32-...
+// can be switched for different scripts
+extern uint8_t scriptBytes[4096];
+
+#define FIRST_BANK 32
+
+/////////////////////////////////////////////////////////////////////////
+// scripting internals
+/////////////////////////////////////////////////////////////////////////
+
+static void loadScriptBytes(uint8_t s)
 {
-    HROOM r = openRoom(stack[curScript].room);
-    esx_f_seek(r, stack[curScript].roomoffs, ESX_SEEK_SET);
+    HROOM r = openRoom(stack[s].room);
+    esx_f_seek(r, stack[s].roomoffs, ESX_SEEK_SET);
     readResource(r, scriptBytes, sizeof(scriptBytes));
     closeRoom(r);
     // for (int8_t i = 0 ; i < 16 ; ++i)
     //     DEBUG_PRINTF("%x ", scriptBytes[i]);
     // DEBUG_PUTS("\n");
+}
+
+static uint8_t findEmptyFrame(void)
+{
+    uint8_t f;
+    for (f = 0 ; f < MAX_SCRIPTS ; ++f)
+        if (stack[f].id == 0)
+            return f;
+    DEBUG_ASSERT(0, "Number of scripts exceeded\n");
+}
+
+static void switchScriptPage(uint8_t s)
+{
+    //DEBUG_PRINTF("Select page %u\n", FIRST_BANK + s);
+    ZXN_WRITE_MMU1(FIRST_BANK + s);
 }
 
 static uint8_t fetchScriptByte(void)
@@ -94,48 +133,76 @@ static int16_t getVarOrDirectWord(uint8_t mask)
 
 static void setResult(uint16_t value)
 {
-	writeVar(resultVarNumber, value);
+	writeVar(stack[curScript].resultVarNumber, value);
 }
 
-void stopScript(void)
+static void stopScript(uint8_t index)
 {
-    if (curScript == -1)
+    DEBUG_PRINTF("Stopping the script %u room %u/%u offset %x\n",
+        stack[index].id, stack[index].room, stack[index].roomoffs,
+        stack[index].offset - 4);
+    stack[index].id = 0;
+    if (index == curScript)
+        exitFlag = 1;
+}
+
+static void op_stopObjectCode(void)
+{
+    stopScript(curScript);
+}
+
+static void op_stopScript(void)
+{
+    uint8_t s = getVarOrDirectByte(PARAM_1);
+
+    DEBUG_PRINTF("Stopping from script %u room %u/%u next offset %x\n",
+        stack[curScript].id, stack[curScript].room, stack[curScript].roomoffs,
+        stack[curScript].offset);
+
+    // WORKAROUND bug #4112: If you enter the lab while Dr. Fred has the powered turned off
+    // to repair the Zom-B-Matic, the script will be stopped and the power will never turn
+    // back on. This fix forces the power on, when the player enters the lab,
+    // if the script which turned it off is running
+    // if (_game.id == GID_MANIAC && _roomResource == 4 && isScriptRunning(MM_SCRIPT(138))) {
+        // TODO
+
+    uint8_t i = curScript;
+    if (s != 0)
     {
-        DEBUG_PUTS("Can't stop script, none is running\n");
-        DEBUG_HALT;
+        for (i = 0 ; i < MAX_SCRIPTS ; ++i)
+            if (stack[i].id == s)
+                break;
+        if (i == MAX_SCRIPTS)
+        {
+            DEBUG_PRINTF("Stopping the script %u which is not executing\n", s);
+            return;
+        }
     }
-    DEBUG_PRINTF("Stopping the script %u/%u offset %x\n",
-        stack[curScript].room, stack[curScript].roomoffs, stack[curScript].offset - 4);
-    --curScript;
-    if (curScript >= 0)
-    {
-        loadScriptBytes();
-    }
+
+    stopScript(i);
 }
 
 static void getResultPos(void)
 {
-    resultVarNumber = fetchScriptByte();
+    stack[curScript].resultVarNumber = fetchScriptByte();
 }
 
-static void pushScript(uint8_t room, uint16_t roomoffs, uint16_t offset)
+static void pushScript(uint8_t id, uint8_t room, uint16_t roomoffs, uint16_t offset)
 {
-    DEBUG_PRINTF("Starting script %u/%u\n", room, roomoffs);
-    ++curScript;
-    if (curScript >= STACK_SIZE - 1)
-    {
-        DEBUG_PUTS("Can't execute more scripts\n");
-        DEBUG_HALT;
-    }
-    stack[curScript].room = room;
-    stack[curScript].roomoffs = roomoffs;
-    loadScriptBytes();
-    stack[curScript].offset = offset;
+    uint8_t s = findEmptyFrame();
+    DEBUG_PRINTF("Starting script %u room %u offset %u in frame %u\n", id, room, roomoffs, s);
+    stack[s].id = id;
+    stack[s].room = room;
+    stack[s].roomoffs = roomoffs;
+    stack[s].offset = offset;
+    switchScriptPage(s);
+    loadScriptBytes(s);
+    switchScriptPage(curScript);
 }
 
 static void parseString(uint8_t actor)
 {
-    uint8_t buffer[512];
+    uint8_t buffer[64];
     uint8_t *ptr = buffer;
 	uint8_t c;
 
@@ -190,6 +257,10 @@ static void jumpRelative(int cond)
 
 static uint8_t isScriptRunning(uint8_t s)
 {
+    uint8_t i;
+    for (i = 0 ; i < MAX_SCRIPTS ; ++i)
+        if (stack[i].id == s)
+            return 1;
     return 0;
 }
 
@@ -210,6 +281,43 @@ static void ifStateCommon(uint16_t type)
 	jumpRelative((getState(obj) & type) != 0);
 }
 
+static uint8_t strcopy(char *d, const char *s)
+{
+    char *d0 = d;
+    while (*d++ = *s++)
+        ;
+    // returns length in characters
+    return d - d0 - 1;
+}
+
+static uint8_t getObjOrActorName(char *s, uint8_t id)
+{
+    //	if (objIsActor(obj))
+    if (id < ACTOR_COUNT)
+    {
+        DEBUG_PRINTF("Name for actor %d\n", id);
+        return strcopy(s, actors[id].name);
+    }
+
+	// for (i = 0; i < _numNewNames; i++) {
+	// 	if (_newNames[i] == obj) {
+	// 		debug(5, "Found new name for object %d at _newNames[%d]", obj, i);
+	// 		return getResourceAddress(rtObjectName, i);
+	// 	}
+	// }
+
+    Object *obj = object_get(id);
+    if (!obj->OBCDoffset)
+        return 0;
+    DEBUG_PRINTF("Name for object %d\n", id);
+    HROOM r = openRoom(currentRoom);
+    seekToOffset(r, obj->OBCDoffset + obj->nameOffs);
+    uint8_t len = readString(r, s);
+    closeRoom(r);
+    return len;
+}
+
+
 ///////////////////////////////////////////////////////////
 // opcodes
 ///////////////////////////////////////////////////////////
@@ -228,12 +336,20 @@ static void op_startMusic(void)
     getVarOrDirectByte(PARAM_1);
 }
 
+static void op_getActorRoom(void)
+{
+	getResultPos();
+	uint8_t act = getVarOrDirectByte(PARAM_1);
+	setResult(actors[act].room);
+}
+
 static void op_drawObject(void)
 {
-	uint8_t idx, i;
+	uint8_t i;
 	// ObjectData *od;
 	// uint16 x, y, w, h;
 	uint8_t xpos, ypos;
+    uint16_t idx;
 
 	idx = getVarOrDirectWord(PARAM_1);
 	xpos = getVarOrDirectByte(PARAM_2);
@@ -241,7 +357,7 @@ static void op_drawObject(void)
     DEBUG_PRINTF("Draw object %u at %u,%u\n", idx, xpos, ypos);
 
     Object *obj = object_get(idx);
-    DEBUG_ASSERT(obj);
+    DEBUG_ASSERT(obj, "op_drawObject");
 
 	if (xpos != 0xFF)
     {
@@ -270,12 +386,12 @@ static void op_drawObject(void)
 
 static void op_setState08(void)
 {
- 	int j = getVarOrDirectWord(PARAM_1);
-    DEBUG_PRINTF("setState08 %u\n", j);
-
+ 	uint16_t j = getVarOrDirectWord(PARAM_1);
     Object *obj = object_get(j);
-    DEBUG_ASSERT(obj);
-    // TODO: objectstate08?
+    //DEBUG_ASSERT(obj, "op_setState08");
+    DEBUG_PRINTF("setState08 %u\n", obj->obj_nr);
+
+    obj->state |= kObjectState_08;
 	graphics_drawObject(obj);
 
 	// putState(obj, getState(obj) | kObjectState_08);
@@ -283,12 +399,26 @@ static void op_setState08(void)
 	// clearDrawObjectQueue();
 }
 
+static void op_clearState08(void)
+{
+    uint16_t j = getActiveObject();
+    Object *obj = object_get(j);
+    DEBUG_PRINTF("clearState08 %u\n", obj->obj_nr);
+    obj->state &= ~kObjectState_08;
+    //putState(obj, getState(obj) & ~kObjectState_08);
+    //markObjectRectAsDirty(obj);
+    //clearDrawObjectQueue();
+
+	graphics_drawObject(obj);
+}
+
 static void op_resourceRoutines(void)
 {
     //DEBUG_PUTS("resourceRoutines\n");
 	uint8_t resid = getVarOrDirectByte(PARAM_1);
 	uint8_t opcode = fetchScriptByte();
-    //DEBUG_PRINTF("   resid %u opcode %u\n", resid, opcode);
+    // DEBUG_PRINTF("   resid %u opcode %u\n", resid, opcode);
+    // just ensures that resource is loaded
     // TODO
 }
 
@@ -365,7 +495,7 @@ static void op_actorOps(void)
 		return;
 	}
 
-	// a = derefActor(act, "actorOps");
+    Actor *a = &actors[act];
 
 	switch (opcode) {
 	case 1:		// SO_SOUND
@@ -379,12 +509,14 @@ static void op_actorOps(void)
 	// 	break;
 	case 3:		// SO_ACTOR_NAME
 		//loadPtrToResource(rtActorName, a->_number, NULL);
-        DEBUG_PRINTF("TODO: Set actor %u talk name '", act);
+        DEBUG_PRINTF("Set actor %u talk name '", act);
         {
             char c;
+            char *n = a->name;
             do
             {
                 c = fetchScriptByte();
+                *n++ = c;
                 if (c)
                     DEBUG_PUTC(c);
             } while (c);
@@ -439,7 +571,7 @@ static void op_setVarRange(void)
 			b = fetchScriptByte();
 
 		setResult(b);
-		resultVarNumber++;
+		stack[curScript].resultVarNumber++;
 	} while (--a);
 }
 
@@ -452,23 +584,24 @@ static void op_verbOps(void)
 	case 0:		// SO_DELETE_VERBS
 		slot = getVarOrDirectByte(PARAM_1) + 1;
 		// assert(0 < slot && slot < _numVerbs);
-		// killVerb(slot);
+		verb_kill(slot);
+        DEBUG_PRINTF("VerbKill %d\n", slot);
 		break;
 
 	case 0xFF:	// Verb On/Off
 		verb = fetchScriptByte();
 		state = fetchScriptByte();
-		//slot = getVerbSlot(verb, 0);
-		// _verbs[slot].curmode = state;
+		slot = verb_getSlot(verb, 0);
+		verbs[slot].curmode = state;
+        DEBUG_PRINTF("VerbOnOff %d\n", slot);
 		break;
 
 	default: {	// New Verb
-		int x = fetchScriptByte() * 8;
-		int y = fetchScriptByte() * 8;
+		int x = fetchScriptByte();// * 8;
+		int y = fetchScriptByte();// * 8;
 		slot = getVarOrDirectByte(PARAM_1) + 1;
 		int prep = fetchScriptByte(); // Only used in V1?
-		// V1 Maniac verbs are relative to the 'verb area' - under the sentence
-        // x += 8;
+        x += 1;//8;
 
 		// VerbSlot *vs;
 		// assert(0 < slot && slot < _numVerbs);
@@ -489,6 +622,11 @@ static void op_verbOps(void)
 
 		// vs->curRect.left = x;
 		// vs->curRect.top = y;
+        DEBUG_ASSERT(slot < _numVerbs, "op_verbOps");
+        VerbSlot *vs = &verbs[slot];
+        vs->verbid = verb;
+        vs->x = x;
+        vs->y = y;
 
         // static const char keyboard[] = {
         //         'q','w','e','r',
@@ -499,16 +637,30 @@ static void op_verbOps(void)
         //     vs->key = keyboard[slot - 1];
 		// }
 
-        // skip the name
-        while (fetchScriptByte())
+        // get the name
+        char *s = vs->name;
+        while (*s++ = fetchScriptByte())
             ;
+        DEBUG_ASSERT(s - vs->name < VERB_NAME_SIZE, "op_verbOps name");
+        DEBUG_PRINTF("New verb '%s' at %d %d\n", vs->name, vs->x, vs->y);
         }
 		break;
 	}
 
-	// // Force redraw of the modified verb slot
-	// drawVerb(slot, 0);
+	// Force redraw of the modified verb slot
+	graphics_drawVerb(&verbs[slot]);
 	// verbMouseOver(0);
+}
+
+static void op_isSoundRunning(void)
+{
+	uint8_t snd;
+	getResultPos();
+	snd = getVarOrDirectByte(PARAM_1);
+	//if (snd)
+	//	snd = _sound->isSoundRunning(snd);
+    snd = 0;
+	setResult(snd);
 }
 
 static void op_breakHere(void)
@@ -520,7 +672,7 @@ static void op_breakHere(void)
 
 static void op_delayVariable(void)
 {
-	delay = getVar();
+	stack[curScript].delay = getVar();
 	//vm.slot[_currentScript].status = ssPaused;
 	op_breakHere();
 }
@@ -538,13 +690,19 @@ static void op_isNotEqual(void)
 	jumpRelative(b != a);
 }
 
+static void op_isNotEqualZero(void)
+{
+	uint16_t a = getVar();
+	jumpRelative(a != 0);
+}
+
 static void op_delay(void)
 {
     uint8_t a = fetchScriptByte() ^ 0xff;
     uint8_t b = fetchScriptByte() ^ 0xff;
     uint8_t c = fetchScriptByte() ^ 0xff;
     //DEBUG_PRINTF("delay %x %x %x\n", a, b, c);
-    delay = a | (b << 8) | ((uint32_t)c << 16);
+    stack[curScript].delay = a | (b << 8) | ((uint32_t)c << 16);
 	// vm.slot[_currentScript].status = ssPaused;
     op_breakHere();
 }
@@ -596,8 +754,8 @@ static void op_startScript(void)
     //     if (VAR(120) == 1)
     //         return;
     // }
-    DEBUG_PRINTF("New script id %u\n", script);
-    pushScript(scripts[script].room, scripts[script].roomoffs, 4);
+    DEBUG_PRINTF("Start script with id %u\n", script);
+    pushScript(script, scripts[script].room, scripts[script].roomoffs, 4);
 }
 
 static void op_getActorX(void)
@@ -636,7 +794,49 @@ static void op_add(void)
 	uint16_t a;
 	getResultPos();
 	a = getVarOrDirectWord(PARAM_1);
-	scummVars[resultVarNumber] += a;
+	scummVars[stack[curScript].resultVarNumber] += a;
+}
+
+static void setUserState(uint8_t state)
+{
+    // if (state & USERSTATE_SET_IFACE) {			// Userface
+    //     _userState = (_userState & ~USERSTATE_IFACE_ALL) | (state & USERSTATE_IFACE_ALL);
+    // }
+
+    // if (state & USERSTATE_SET_FREEZE) {		// Freeze
+    //     if (state & USERSTATE_FREEZE_ON)
+    //         freezeScripts(0);
+    //     else
+    //         unfreezeScripts();
+    // }
+
+    // Cursor Show/Hide
+    if (state & USERSTATE_SET_CURSOR)
+    {
+        //_userState = (_userState & ~USERSTATE_CURSOR_ON) | (state & USERSTATE_CURSOR_ON);
+        if (state & USERSTATE_CURSOR_ON)
+        {
+            //_userPut = 1;
+            cursor_setState(1);
+        }
+        else
+        {
+            //_userPut = 0;
+            cursor_setState(0);
+        }
+    }
+
+    // // Hide all verbs and inventory
+    // Common::Rect rect;
+    // rect.top = _virtscr[kVerbVirtScreen].topline;
+    // rect.bottom = _virtscr[kVerbVirtScreen].topline + 8 * 88;
+    // rect.right = _virtscr[kVerbVirtScreen].w - 1;
+    //     rect.left = 16;
+    // restoreBackground(rect);
+
+    // // Draw all verbs and inventory
+    // redrawVerbs();
+    // runInventoryScript(1);
 }
 
 static void op_cursorCommand(void)
@@ -644,12 +844,12 @@ static void op_cursorCommand(void)
 	uint16_t cmd = getVarOrDirectWord(PARAM_1);
 	uint8_t state = cmd >> 8;
 
+    DEBUG_PRINTF("Set cursor state %x user state %x\n", cmd & 0xff, state);
 	if (cmd & 0xFF) {
 		scummVars[VAR_CURSORSTATE] = cmd & 0xFF;
 	}
 
-    // TODO
-	// setUserState(state);
+	setUserState(state);
 }
 
 static void op_loadRoomWithEgo(void)
@@ -750,19 +950,211 @@ static void op_switchCostumeSet(void)
     graphics_loadCostumeSet(fetchScriptByte());
 }
 
+static void op_endCutscene(void)
+{
+    scummVars[VAR_OVERRIDE] = 0;
+
+	// vm.cutSceneStackPointer = 0;
+	// vm.cutSceneScript[0] = 0;
+	// vm.cutScenePtr[0] = 0;
+	// VAR(VAR_CURSORSTATE) = vm.cutSceneData[1];
+	// // Reset user state to values before cutscene
+	// setUserState(vm.cutSceneData[0] | USERSTATE_SET_IFACE | USERSTATE_SET_CURSOR | USERSTATE_SET_FREEZE);
+
+    //actorFollowCamera(VAR(VAR_EGO));
+}
+
 static void op_findObject(void)
 {
-//    DEBUG_PUTS("findObject\n");
-	uint16_t obj = 0;
+    Object *obj = 0;
 	getResultPos();
-	uint16_t x = getVarOrDirectByte(PARAM_1) * V12_X_MULTIPLIER;
-	uint16_t y = getVarOrDirectByte(PARAM_2) * V12_Y_MULTIPLIER;
-	// obj = findObject(x, y);
+    // objects store x y without multipliers
+	uint16_t x = getVarOrDirectByte(PARAM_1);// * V12_X_MULTIPLIER;
+	uint16_t y = getVarOrDirectByte(PARAM_2);// * V12_Y_MULTIPLIER;
+	obj = object_find(x, y);
 	// if (obj == 0 && (_game.platform == Common::kPlatformNES) && (_userState & USERSTATE_IFACE_INVENTORY)) {
 	// 	if (_mouseOverBoxV2 >= 0 && _mouseOverBoxV2 < 4)
 	// 		obj = findInventory(VAR(VAR_EGO), _mouseOverBoxV2 + _inventoryOffset + 1);
 	// }
-	setResult(obj);
+    if (obj)
+    {
+        DEBUG_PRINTF("Found object %d x=%d y=%d\n", obj->obj_nr, obj->x, obj->y);
+	    setResult(obj->obj_nr);
+    }
+    else
+    {
+        setResult(0);
+    }
+}
+
+static void op_drawSentence(void)
+{
+	// Common::Rect sentenceline;
+	// const byte *temp;
+    uint8_t slot = verb_getSlot(scummVars[VAR_SENTENCE_VERB], 0);
+    char buf[61];
+    char *s = buf;
+
+	// if (!((_userState & USERSTATE_IFACE_SENTENCE) ||
+	//       (_game.platform == Common::kPlatformNES && (_userState & USERSTATE_IFACE_ALL))))
+	// 	return;
+
+	// if (getResourceAddress(rtVerb, slot))
+	// 	_sentenceBuf = (char *)getResourceAddress(rtVerb, slot);
+	// else
+	// 	return;
+
+    if (scummVars[VAR_SENTENCE_OBJECT1] > 0) {
+        uint8_t len = getObjOrActorName(s + 1, scummVars[VAR_SENTENCE_OBJECT1]);
+        if (len)
+        {
+            *s++ = ' ';
+            s += len;
+        }
+    }
+
+	// if (0 < VAR(VAR_SENTENCE_PREPOSITION) && VAR(VAR_SENTENCE_PREPOSITION) <= 4) {
+	// 	drawPreposition(VAR(VAR_SENTENCE_PREPOSITION));
+	// }
+
+    if (scummVars[VAR_SENTENCE_OBJECT2] > 0) {
+        uint8_t len = getObjOrActorName(s + 1, scummVars[VAR_SENTENCE_OBJECT1]);
+        if (len)
+        {
+            *s++ = ' ';
+            s += len;
+        }
+    }
+
+    *s = 0;
+
+	// _string[2].charset = 1;
+	// _string[2].ypos = _virtscr[kVerbVirtScreen].topline;
+	// _string[2].xpos = 0;
+	// _string[2].right = _virtscr[kVerbVirtScreen].w - 1;
+	// if (_game.platform == Common::kPlatformNES) {
+	// 	_string[2].xpos = 16;
+	// 	_string[2].color = 0;
+
+	// byte string[80];
+	// const char *ptr = _sentenceBuf.c_str();
+	// int i = 0, len = 0;
+
+	// Maximum length of printable characters
+	// int maxChars = (_game.platform == Common::kPlatformNES) ? 60 : 40;
+	// while (*ptr) {
+	// 	if (*ptr != '@')
+	// 		len++;
+	// 	if (len > maxChars) {
+	// 		break;
+	// 	}
+
+	// 	string[i++] = *ptr++;
+
+	// 	if (_game.platform == Common::kPlatformNES && len == 30) {
+	// 		string[i++] = 0xFF;
+	// 		string[i++] = 8;
+	// 	}
+	// }
+	// string[i] = 0;
+
+    // sentenceline.top = _virtscr[kVerbVirtScreen].topline;
+    // sentenceline.bottom = _virtscr[kVerbVirtScreen].topline + 16;
+    // sentenceline.left = 16;
+    // sentenceline.right = _virtscr[kVerbVirtScreen].w - 1;
+
+	// restoreBackground(sentenceline);
+
+    // TODO: special codes
+    DEBUG_PRINTF("Draw sentence '%s'\n", buf);
+    graphics_print(buf);
+}
+
+static void op_doSentence(void)
+{
+    uint8_t verb;
+
+    verb = getVarOrDirectByte(PARAM_1);
+    if (verb == 0xFC) {
+        // _sentenceNum = 0;
+        // stopScript(SENTENCE_SCRIPT);
+        return;
+    }
+    if (verb == 0xFB) {
+        // resetSentence();
+        return;
+    }
+
+	//st = &_sentence[_sentenceNum++];
+
+    uint16_t objectA = getVarOrDirectWord(PARAM_2);
+    uint16_t objectB = getVarOrDirectWord(PARAM_3);
+	uint8_t opcode = fetchScriptByte();
+    DEBUG_PRINTF("doSentence %d %d %d %d\n", verb, objectA, objectB, opcode);
+	switch (opcode) {
+	case 0:
+		// Do nothing (besides setting up the sentence above)
+		break;
+	case 1:
+		// Execute the sentence
+		//_sentenceNum--;
+
+		if (verb == 254) {
+			//ScummEngine::stopObjectScript(st->objectA);
+		} else {
+			// bool isBackgroundScript;
+			// bool isSpecialVerb;
+			// if (verb != 253 && verb != 250) {
+			// 	scummVars[VAR_ACTIVE_VERB] = verb;
+			// 	scummVars[VAR_ACTIVE_OBJECT1] = objectA;
+			// 	scummVars[VAR_ACTIVE_OBJECT2] = objectB;
+
+			// 	isBackgroundScript = false;
+			// 	isSpecialVerb = false;
+			// } else {
+			// 	isBackgroundScript = (st->verb == 250);
+			// 	isSpecialVerb = true;
+			// 	verb = 253;
+			// }
+
+			// Check if an object script for this object is already running. If
+			// so, reuse its script slot. Note that we abuse two script flags:
+			// freezeResistant and recursive. We use them to track two
+			// script flags used in V1/V2 games. The main reason we do it this
+			// ugly evil way is to avoid having to introduce yet another save
+			// game revision.
+			// int slot = -1;
+			// ScriptSlot *ss;
+			// int i;
+
+			// ss = vm.slot;
+			// for (i = 0; i < NUM_SCRIPT_SLOT; i++, ss++) {
+			// 	if (st->objectA == ss->number &&
+			// 		ss->freezeResistant == isBackgroundScript &&
+			// 		ss->recursive == isSpecialVerb &&
+			// 		(ss->where == WIO_ROOM || ss->where == WIO_INVENTORY || ss->where == WIO_FLOBJECT)) {
+			// 		slot = i;
+			// 		break;
+			// 	}
+			// }
+
+			// runObjectScript(st->objectA, st->verb, isBackgroundScript, isSpecialVerb, NULL, slot);
+		}
+		break;
+	case 2:
+		// Print the sentence
+		//_sentenceNum--;
+
+		scummVars[VAR_SENTENCE_VERB] = verb;
+		scummVars[VAR_SENTENCE_OBJECT1] = objectA;
+		scummVars[VAR_SENTENCE_OBJECT2] = objectB;
+
+        op_drawSentence();
+		break;
+	default:
+		DEBUG_PUTS("doSentence error\n");
+        DEBUG_HALT;
+	}
 }
 
 static void op_ifState01(void)
@@ -772,30 +1164,34 @@ static void op_ifState01(void)
 
 void executeScript(void)
 {
-    if (delay)
+    if (stack[curScript].delay)
     {
         //DEBUG_PRINTF("Delay %u\n", (uint16_t)delay);
         // if (delay > 100)
         //     delay -= 100;
         // else
         //     delay = 0;
-        --delay;
+        --stack[curScript].delay;
         return;
     }
-    while (curScript >= 0 && !exitFlag)
+    while (!exitFlag)
     {
-        //DEBUG_PRINTF("EXEC %u %x\n", stack[curScript].id, stack[curScript].offset - 4);
+        //DEBUG_PRINTF("EXEC %u 0x%x\n", stack[curScript].id, stack[curScript].offset - 4);
         opcode = fetchScriptByte();
+        //DEBUG_PRINTF("--- opcode 0x%x\n", opcode);
         switch (opcode)
         {
         case 0x00:
-            stopScript();
+            op_stopObjectCode();
             break;
         case 0x01:
             op_putActor();
             break;
         case 0x02:
             op_startMusic();
+            break;
+        case 0x03:
+            op_getActorRoom();
             break;
         case 0x05:
             op_drawObject();
@@ -874,6 +1270,9 @@ void executeScript(void)
         case 0x43:
             op_getActorX();
             break;
+        case 0x47:
+            op_clearState08();
+            break;
         case 0x48:
             op_isEqual();
             break;
@@ -890,7 +1289,7 @@ void executeScript(void)
             op_cursorCommand();
             break;
         case 0x62:
-            stopScript();
+            op_stopScript();
             break;
         // case 0x64:
         //     op_loadRoomWithEgo();
@@ -910,27 +1309,48 @@ void executeScript(void)
         case 0x7a:
             op_verbOps();
             break;
+        case 0x7c:
+            op_isSoundRunning();
+            break;
         case 0x80:
             op_breakHere();
             break;
         case 0x88:
             op_isNotEqual();
             break;
+        case 0x9a:
+            op_move();
+            break;
         case 0xa0:
-            stopScript();
+            op_stopObjectCode();
+            break;
+        case 0xa8:
+            op_isNotEqualZero();
             break;
         case 0xab:
             op_switchCostumeSet();
             break;
+        case 0xc0:
+            op_endCutscene();
+            break;
+        case 0xc8:
+            op_isEqual();
+            break;
+        case 0xd9:
+            op_doSentence();
+            break;
         case 0xf5:
             op_findObject();
+            break;
+        case 0xf9:
+            op_doSentence();
             break;
         case 0xff:
             op_ifState01();
             break;
         default:
             DEBUG_PRINTF("Unknown opcode %x\n", opcode);
-            stopScript();
+            DEBUG_HALT;
             break;
         }
     }
@@ -939,17 +1359,82 @@ void executeScript(void)
 void runScript(uint8_t s)
 {
     DEBUG_PRINTF("New script id %u\n", s);
-    pushScript(scripts[s].room, scripts[s].roomoffs, 4);
-    executeScript();
+    pushScript(s, scripts[s].room, scripts[s].roomoffs, 4);
+    //executeScript();
 }
 
 void processScript(void)
 {
-    exitFlag = 0;
-    executeScript();
+    for (curScript = 0 ; curScript < MAX_SCRIPTS ; ++curScript)
+    {
+        if (stack[curScript].id)
+        {
+            exitFlag = 0;
+            switchScriptPage(curScript);
+            executeScript();
+        }
+    }
 }
 
-void runRoomScript(uint8_t room, uint16_t offs)
+void runRoomScript(uint8_t id, uint8_t room, uint16_t offs)
 {
-    pushScript(room, offs, 0);
+    pushScript(id, room, offs, 0);
+}
+
+enum {
+	MBS_LEFT_CLICK = 0x8000,
+	MBS_RIGHT_CLICK = 0x4000,
+	MBS_MOUSE_MASK = (MBS_LEFT_CLICK | MBS_RIGHT_CLICK),
+	MBS_MAX_KEY	= 0x0200
+};
+
+__sfr __banked __at 0x7ffe IO_7FFE;
+
+void updateScummVars(void)
+{
+    // VAR(VAR_CAMERA_POS_X) = (camera._cur.x >> V12_X_SHIFT);
+
+    // We use shifts below instead of dividing by V12_X_MULTIPLIER resp.
+    // V12_Y_MULTIPLIER to handle negative coordinates correctly.
+    // This fixes e.g. bugs #1328131 and #1537595.
+    scummVars[VAR_VIRT_MOUSE_X] = cursorX >> V12_X_SHIFT;
+    scummVars[VAR_VIRT_MOUSE_Y] = cursorY >> V12_Y_SHIFT;
+
+    // Adjust mouse coordinates as narrow rooms in NES are centered
+    // if (_game.platform == Common::kPlatformNES && _NESStartStrip > 0) {
+    //     VAR(VAR_VIRT_MOUSE_X) -= 2;
+    //     if (VAR(VAR_VIRT_MOUSE_X) < 0)
+    //         VAR(VAR_VIRT_MOUSE_X) = 0;
+    // }
+
+	// // 'B' is used to skip cutscenes in the NES version of Maniac Mansion
+	// } else if (_game.id == GID_MANIAC &&_game.platform == Common::kPlatformNES) {
+	// 	if (lastKeyHit.keycode == Common::KEYCODE_b && lastKeyHit.hasFlags(Common::KBD_SHIFT))
+	// 		lastKeyHit = Common::KeyState(Common::KEYCODE_ESCAPE);
+
+	// // On Alt-F5 prepare savegame for the original save/load dialog.
+	// if (lastKeyHit.keycode == Common::KEYCODE_F5 && lastKeyHit.hasFlags(Common::KBD_ALT)) {
+	// 	prepareSavegame();
+	// 	if (_game.id == GID_MANIAC && _game.version == 0) {
+	// 		runScript(2, 0, 0, 0);
+	// 	}
+	// 	if (_game.id == GID_MANIAC &&_game.platform == Common::kPlatformNES) {
+	// 		runScript(163, 0, 0, 0);
+	// 	}
+	// }
+
+    // mouse and keyboard input
+    uint16_t s = 0;
+    if (!(IO_7FFE & 1))
+        s = MBS_LEFT_CLICK; 
+	scummVars[VAR_KEYPRESS] = s;
+
+	// if (VAR_KEYPRESS != 0xFF && _mouseAndKeyboardStat) {		// Key Input
+	// 	if (315 <= _mouseAndKeyboardStat && _mouseAndKeyboardStat <= 323) {
+	// 		// Convert F-Keys for V1/V2 games (they start at 1)
+	// 		VAR(VAR_KEYPRESS) = _mouseAndKeyboardStat - 314;
+	// 	} else {
+	// 		VAR(VAR_KEYPRESS) = _mouseAndKeyboardStat;
+	// 	}
+	// }
 }

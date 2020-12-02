@@ -42,10 +42,11 @@
 #define VAR_CUTSCENEEXIT_KEY 40
 #define VAR_TALK_ACTOR 41
 
-extern uint16_t scummVars[];
+extern int16_t scummVars[];
 
 void runScript(uint8_t s);
-void runRoomScript(uint8_t room, uint16_t offs);
+void runRoomScript(uint8_t id, uint8_t room, uint16_t offs);
 void processScript(void);
+void updateScummVars(void);
 
 #endif

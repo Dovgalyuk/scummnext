@@ -18,6 +18,9 @@ typedef struct Actor
 {
     uint8_t room;
     uint8_t x, y;
+
+    // name
+    char name[16];
     
     // movement parameters
     uint8_t destX, destY;
@@ -39,6 +42,8 @@ typedef struct Actor
 
 #define ACTOR_COUNT 25
 extern Actor actors[];
+
+extern int8_t talkDelay;
 
 void actors_walk(void);
 void actors_animate(void);

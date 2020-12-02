@@ -92,6 +92,9 @@ void debug_printf(const char *s, ...)
             case 'c':
                 debug_putc(va_arg(ap, int8_t));
                 break;
+            case 's':
+                debug_puts(va_arg(ap, char*));
+                break;
             }
         }
         else if (c != '\r')

@@ -4,7 +4,7 @@
 
 // pages for buffers
 #pragma output CRT_ORG_PAGE_2 = 0x0000
-#pragma output CRT_ORG_PAGE_3 = 0x2000
+#pragma output CRT_ORG_PAGE_32 = 0x2000
 
 // stack location
 

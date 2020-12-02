@@ -68,3 +68,25 @@ uint16_t readResource(HROOM r, uint8_t *buf, uint16_t sz)
 
     return size;
 }
+
+void seekToOffset(HROOM r, uint16_t offs)
+{
+    esx_f_seek(r, offs, ESX_SEEK_SET);
+}
+
+uint8_t readString(HROOM r, char *s)
+{
+    char c;
+    char *start = s;
+    do
+    {
+        c = readByte(r);
+        *s++ = c & 0x7f;
+        if (c & 0x80)
+        {
+            *s++ = ' ';
+        }
+    }
+    while (c);
+    return s - start - 1;
+}

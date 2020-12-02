@@ -20,7 +20,7 @@ enum ObjectStateV2 {
 
 typedef struct Object
 {
-    uint8_t obj_nr;
+    uint16_t obj_nr;
     uint8_t x, y;
     uint8_t walk_x, walk_y;
     uint8_t width, height;
@@ -28,11 +28,14 @@ typedef struct Object
     uint8_t state;
     uint8_t parent;
     uint8_t parentstate;
+    uint8_t nameOffs;
     uint16_t OBIMoffset;
     uint16_t OBCDoffset;
+    uint16_t scriptOffset;
 } Object;
 
-Object *object_get(uint8_t id);
+Object *object_get(uint16_t id);
+Object *object_find(uint16_t x, uint16_t y);
 
 void setupRoomObjects(HROOM r);
 

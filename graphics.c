@@ -5,13 +5,12 @@
 #include "camera.h"
 #include "room.h"
 #include "debug.h"
+#include "verbs.h"
 
 #define TILEMAP_BASE 0x6000
 #define TILE_BASE 0x4000
-#define LINE_WIDTH 40
-#define LINE_BYTES (LINE_WIDTH * 2)
-#define LINE_GAP ((LINE_WIDTH - SCREEN_WIDTH) / 2)
-#define SCREEN_TOP 4
+#define TILE_BYTES 2
+#define LINE_BYTES (LINE_WIDTH * TILE_BYTES)
 
 #define PAL_SPRITES 0x20
 #define PAL_TILES   0x30
@@ -147,7 +146,7 @@ void initGraphics(void)
 
     // // DEBUG_PUTS("Setting tilemap\n");
 
-    uint8_t *p = (uint8_t*)TILEMAP_BASE + LINE_BYTES * 20;
+    uint8_t *p = (uint8_t*)TILEMAP_BASE + LINE_BYTES * 26;
     for (i = 0 ; i < 256 ; ++i)
     {
         *p++ = i;
@@ -537,10 +536,66 @@ static void decodeNESObject(Object *obj)
     closeRoom(r);
 }
 
+void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, uint8_t sprpal)
+{
+    IO_SPRITE_SLOT = nextSprite;
+    uint8_t i;
+    //DEBUG_PRINTF("tile: %x\n", tile);
+    uint8_t *t = &spriteTiles[tile * 16];
+    for (i = 0 ; i < 8 ; ++i)
+    {
+        uint8_t c0 = t[i];
+        uint8_t c1 = t[i + 8];
+        // tile data is ok
+        //DEBUG_PRINTF("tile line: %x %x\n", c0, c1);
+        uint8_t c = 0;
+        for (uint8_t j = 0 ; j < 8 ; ++j)
+        {
+            uint8_t cc = ((c0 & mask) ? 1 : 0) | ((c1 & mask) ? 2 : 0);
+            // zero is transparent
+            if (cc)
+                cc |= sprpal;
+            c = (c << 4) | cc;
+            if (j & 1)
+            {
+                IO_SPRITE_PATTERN = c;
+            }
 
-void graphics_print(const char *s)
+            if (mask == 0x01) {
+                c0 >>= 1;
+                c1 >>= 1;
+            } else {
+                c0 <<= 1;
+                c1 <<= 1;
+            }
+        }
+        IO_SPRITE_PATTERN = 0x0;
+        IO_SPRITE_PATTERN = 0x0;
+        IO_SPRITE_PATTERN = 0x0;
+        IO_SPRITE_PATTERN = 0x0;
+    }
+    for (i = 0 ; i < 64 ; ++i)
+        IO_SPRITE_PATTERN = 0x0;
+    // second pattern, unused yet
+    for (i = 0 ; i < 128 ; ++i)
+        IO_SPRITE_PATTERN = 0x0;
+}
+
+static void clearTalkArea(void)
 {
     uint8_t *screen = (uint8_t*)TILEMAP_BASE;
+    uint8_t *end = (uint8_t*)TILEMAP_BASE + SCREEN_TOP * LINE_BYTES;
+    while (screen != end)
+    {
+        // hardcoded black tile
+        *screen++ = 1;
+        *screen++ = 0;
+    }
+}
+
+static void printAtXY(const char *s, uint8_t x, uint8_t y)
+{
+    uint8_t *screen = (uint8_t*)TILEMAP_BASE + x * TILE_BYTES + y * LINE_BYTES;
     while (*s)
     {
         //DEBUG_PRINTF("char %u pattern %u\n", *s, translationTable[*s]);
@@ -549,11 +604,32 @@ void graphics_print(const char *s)
     }
 }
 
+void graphics_print(const char *s)
+{
+    clearTalkArea();
+    printAtXY(s, 0, 0);
+}
+
+void graphics_drawVerb(VerbSlot *v)
+{
+    printAtXY(v->name, LINE_GAP + v->x, v->y);
+}
+
 void graphics_updateScreen(void)
 {
     uint8_t i, j;
+    // update message area
+    if (talkDelay)
+    {
+        if (!--talkDelay)
+        {
+            clearTalkArea();
+        }
+    }
+
     // update background picture
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + SCREEN_TOP * LINE_BYTES;
+
     uint8_t gap = LINE_GAP;
     uint8_t offs;
     uint8_t width = SCREEN_WIDTH;

@@ -6,6 +6,7 @@
 #include "graphics.h"
 #include "camera.h"
 #include "actor.h"
+#include "cursor.h"
 
 const int _numGlobalObjects = 775;
 const int _numRooms = 55;
@@ -24,7 +25,6 @@ static const int v1MMNEScostTables[2][6] = {
 
 int _numBitVariables = 4096;			// 2048
 int _numArray = 50;
-int _numVerbs = 100;
 int _numNewNames = 50;
 int _numCharsets = 9;					// 9
 int _numInventory = 80;					// 80
@@ -69,7 +69,7 @@ int main()
 {
     // init memory bank 0-16k
     ZXN_WRITE_MMU0(2);
-    ZXN_WRITE_MMU1(3);
+    //ZXN_WRITE_MMU1(32);
 
     int i;
     HROOM f = openRoom(0);
@@ -123,7 +123,9 @@ int main()
         actors_animate();
         actors_walk();
         camera_move();
+        updateScummVars();
         processScript();
+        cursor_animate();
 
         graphics_updateScreen();
 
