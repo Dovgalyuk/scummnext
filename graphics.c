@@ -6,17 +6,11 @@
 #include "room.h"
 #include "debug.h"
 #include "verbs.h"
-
-#define TILEMAP_BASE 0x6000
-#define TILE_BASE 0x4000
-#define TILE_BYTES 2
-#define LINE_BYTES (LINE_WIDTH * TILE_BYTES)
+#include "sprites.h"
 
 #define PAL_SPRITES 0x20
 #define PAL_TILES   0x30
 
-static uint8_t baseTilesCount;
-static uint16_t tilesCount;
 static uint8_t translationTable[256];
 
 static uint8_t nametable[16][64];
@@ -27,12 +21,6 @@ uint8_t costlens[279];
 uint8_t costoffs[556];
 // static uint8_t costdata[11234];
 uint8_t costdata_id;
-//uint8_t spriteTiles[4096];
-extern uint8_t spriteTiles[];
-// this is temporary
-//static uint8_t tileBuf[4096];
-//#define tileBuf ((uint8_t*)0x3000)
-extern uint8_t tileBuf[];
 
 #define RGB2NEXT(r, g, b) (uint8_t)(((r) & 0xe0) | (((g) >> 3) & 0x1c) | (((b) >> 6) & 0x3)), \
                           (((b) >> 5) & 1)
@@ -166,48 +154,6 @@ void initGraphics(void)
     // // DEBUG_PUTS("End setup\n");
 }
 
-static uint16_t decodeNESTileData(uint8_t *buf, HROOM f, uint16_t len)
-{
-    uint8_t *dst = buf;
-    // decode NES tile data
-    uint8_t count = readByte(f);
-    uint8_t data = readByte(f);
-    len -= 2;
-	while (len) {
-		for (uint8_t j = 0; j < (count & 0x7F); j++)
-        {
-			*dst++ = data;
-            if (count & 0x80)
-            {
-                if (len)
-                {
-                    data = readByte(f);
-                    --len;
-                }
-            }
-        }
-		if (count & 0x80)
-        {
-            count = data;
-        }
-        else
-        {
-            if (len)
-            {
-                count = readByte(f);
-                --len;
-            }
-        }
-        if (len)
-        {
-            data = readByte(f);
-            --len;
-        }
-	}
-
-    return dst - buf;
-}
-
 void decodeNESTrTable(void)
 {
     HROOM r = seekResource(&costumes[77]);
@@ -218,100 +164,6 @@ void decodeNESTrTable(void)
     closeRoom(r);
 }
 
-static uint16_t decodeNESTiles(uint8_t *buf, uint8_t set)
-{
-    HROOM f = seekResource(&costumes[set]);
-    uint16_t len = readWord(f);
-    uint16_t count = readByte(f);
-    uint16_t bytes = decodeNESTileData(buf, f, len - 1);
-    closeRoom(f);
-    if (count == 0)
-        count = bytes / 16;
-    DEBUG_PRINTF("NES tiles %u %u/%u\n", count, len, bytes);
-    return count;
-}
-
-static void setTiles(uint16_t count)
-{
-    uint8_t *tiles = (uint8_t*)TILE_BASE + baseTilesCount * 32;
-    //uint8_t *screen = (uint8_t*)TILEMAP_BASE;
-    if (!baseTilesCount)
-        baseTilesCount = count;
-    tilesCount = baseTilesCount + count;
-    for (uint16_t c = 0 ; c < count ; ++c)
-    {
-        // DEBUG_PRINTF("Tile %u: ", c);
-        for (uint8_t i = 0 ; i < 8 ; ++i)
-        {
-            uint8_t c0 = tileBuf[c * 16 + i];
-            uint8_t c1 = tileBuf[c * 16 + i + 8];
-            for (uint8_t j = 0 ; j < 8 ; ++j)
-            {
-                uint8_t col1 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-                ++j;
-                uint8_t col2 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-                uint8_t b = (col1 << 4) | col2;
-                *tiles++ = b;
-                // DEBUG_PRINTF("%x", b);
-            }
-        }
-        // DEBUG_PUTS("\n");
-        //*screen++ = c;
-    }
-}
-
-// static void setSprites(uint16_t count)
-// {
-//     DEBUG_PRINTF("Setup %u sprites\n", count);
-//     uint8_t i;
-//     // converts 8x8 NES sprites to 16x16 ZX Next
-//     if (count > 128)
-//         count = 128;
-//     IO_SPRITE_SLOT = 0;
-//     for (uint16_t c = 0 ; c < count ; ++c)
-//     {
-//         // send pattern
-//         for (i = 0 ; i < 8 ; ++i)
-//         {
-//             uint8_t c0 = tileBuf[c * 16 + i];
-//             uint8_t c1 = tileBuf[c * 16 + i + 8];
-//             for (uint8_t j = 0 ; j < 8 ; ++j)
-//             {
-//                 uint8_t col1 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-//                 ++j;
-//                 uint8_t col2 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
-//                 uint8_t b = (col1 << 4) | col2;
-//                 IO_SPRITE_PATTERN = b;
-//             }
-//             IO_SPRITE_PATTERN = 0x0;
-//             IO_SPRITE_PATTERN = 0x0;
-//             IO_SPRITE_PATTERN = 0x0;
-//             IO_SPRITE_PATTERN = 0x0;
-//         }
-//         for (i = 0 ; i < 64 ; ++i)
-//             IO_SPRITE_PATTERN = 0x0;
-//     }
-
-//     // for (i = 0 ; i < 128 ; ++i)
-//     // {
-//     //     // send attributes
-//     //     IO_SPRITE_SLOT = i;
-//     //     IO_SPRITE_ATTRIBUTE = (i & 0xf) * 17; // x
-//     //     IO_SPRITE_ATTRIBUTE = (i & 0xf0); // y
-//     //     IO_SPRITE_ATTRIBUTE = 0;
-//     //     IO_SPRITE_ATTRIBUTE = 0xc0 | (i & 0x3f);
-//     //     IO_SPRITE_ATTRIBUTE = 0x80 | (i & 0x40); // anchor 4-bit sprite
-//     // }
-
-//     // sprite transparency register
-//     ZXN_WRITE_REG(0x4b, 0);
-// }
-
-void decodeNESBaseTiles(void)
-{
-    uint16_t count = decodeNESTiles(tileBuf, 37);
-    setTiles(count);
-}
 
 static void updatePalette(HROOM r, uint8_t id)
 {
@@ -349,8 +201,8 @@ void decodeNESGfx(HROOM r)
     uint16_t gdata = readWord(r);
     esx_f_seek(r, gdata, ESX_SEEK_SET);
     uint8_t tileset = readByte(r);
-    DEBUG_PRINTF("decoding gdata %u tileset %u\n", gdata, tileset);
-    setTiles(decodeNESTiles(tileBuf, 37 + tileset));
+    //DEBUG_PRINTF("decoding gdata %u tileset %u\n", gdata, tileset);
+    decodeTiles(tileset);
     // decode palette
     updatePalette(r, PAL_TILES);
     // decode name table
@@ -424,20 +276,7 @@ void graphics_loadCostumeSet(uint8_t n)
 
     // decode tiles, but do not copy them to ZXNext yet,
     // because 256 patterns won't fit
-    decodeNESTiles(spriteTiles, v1MMNEScostTables[n][4]);
-    // int i;
-    // int count = 0;
-    // for (i = 0 ; i < 256 ; ++i)
-    // {
-    //     uint8_t sum = 0;
-    //     uint8_t j;
-    //     uint8_t *p = &spriteTiles[i * 16];
-    //     for (j = 0 ; j < 16 ; ++j)
-    //         sum |= *p++;
-    //     if (sum)
-    //         ++count;
-    // }
-    // DEBUG_PRINTF("decoded %u non-empty sprite tiles\n", count);
+    decodeSpriteTiles(v1MMNEScostTables[n][4]);
 
     // palette for sprites
     r = seekResource(&costumes[v1MMNEScostTables[n][5]]);
@@ -536,51 +375,6 @@ static void decodeNESObject(Object *obj)
     closeRoom(r);
 }
 
-void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, uint8_t sprpal)
-{
-    IO_SPRITE_SLOT = nextSprite;
-    uint8_t i;
-    //DEBUG_PRINTF("tile: %x\n", tile);
-    uint8_t *t = &spriteTiles[tile * 16];
-    for (i = 0 ; i < 8 ; ++i)
-    {
-        uint8_t c0 = t[i];
-        uint8_t c1 = t[i + 8];
-        // tile data is ok
-        //DEBUG_PRINTF("tile line: %x %x\n", c0, c1);
-        uint8_t c = 0;
-        for (uint8_t j = 0 ; j < 8 ; ++j)
-        {
-            uint8_t cc = ((c0 & mask) ? 1 : 0) | ((c1 & mask) ? 2 : 0);
-            // zero is transparent
-            if (cc)
-                cc |= sprpal;
-            c = (c << 4) | cc;
-            if (j & 1)
-            {
-                IO_SPRITE_PATTERN = c;
-            }
-
-            if (mask == 0x01) {
-                c0 >>= 1;
-                c1 >>= 1;
-            } else {
-                c0 <<= 1;
-                c1 <<= 1;
-            }
-        }
-        IO_SPRITE_PATTERN = 0x0;
-        IO_SPRITE_PATTERN = 0x0;
-        IO_SPRITE_PATTERN = 0x0;
-        IO_SPRITE_PATTERN = 0x0;
-    }
-    for (i = 0 ; i < 64 ; ++i)
-        IO_SPRITE_PATTERN = 0x0;
-    // second pattern, unused yet
-    for (i = 0 ; i < 128 ; ++i)
-        IO_SPRITE_PATTERN = 0x0;
-}
-
 static void clearTalkArea(void)
 {
     uint8_t *screen = (uint8_t*)TILEMAP_BASE;
@@ -601,18 +395,24 @@ static void printAtXY(const char *s, uint8_t x, uint8_t y)
         //DEBUG_PRINTF("char %u pattern %u\n", *s, translationTable[*s]);
         *screen++ = translationTable[*s++];
         *screen++ = 0;
+        ++x;
+        if (x >= LINE_WIDTH - TEXT_GAP)
+        {
+            x = 0;
+            screen += 2 * TEXT_GAP * TILE_BYTES;
+        }
     }
 }
 
 void graphics_print(const char *s)
 {
     clearTalkArea();
-    printAtXY(s, 0, 0);
+    printAtXY(s, TEXT_GAP, 0);
 }
 
 void graphics_drawVerb(VerbSlot *v)
 {
-    printAtXY(v->name, LINE_GAP + v->x, v->y);
+    printAtXY(v->name, TEXT_GAP - 1 + v->x, v->y);
 }
 
 void graphics_updateScreen(void)
@@ -653,7 +453,7 @@ void graphics_updateScreen(void)
 
     uint8_t bytegap = gap * 2;
     //DEBUG_PRINTF("cameraX=%u roomWidth=%u offs=%u gap=%u\n", cameraX, roomWidth, offs, gap);
-    for (i = 0 ; i < 16 ; ++i)
+    for (i = 0 ; i < SCREEN_HEIGHT ; ++i)
     {
         screen += bytegap;
         for (j = 0 ; j < width ; ++j)
@@ -712,4 +512,14 @@ void graphics_drawObject(Object *obj)
         return;
     // TODO: room?
     decodeNESObject(obj);
+}
+
+uint8_t graphics_findVirtScreen(uint16_t y)
+{
+    uint8_t yy = y / 8;
+    if (yy <= SCREEN_TOP)
+        return kTextVirtScreen;
+    if (yy <= SCREEN_TOP + SCREEN_HEIGHT)
+        return kMainVirtScreen;
+    return kVerbVirtScreen;
 }

@@ -9,6 +9,8 @@
 #define _numLocalObjects 200
 
 static Object objects[_numLocalObjects];
+extern uint8_t objectOwnerTable[_numGlobalObjects];
+extern uint8_t objectStateTable[_numGlobalObjects];
 
 static Object *findLocalObjectSlot(void)
 {
@@ -38,14 +40,17 @@ Object *object_get(uint16_t id)
     return NULL;
 }
 
-void setupRoomObjects(HROOM r)
+void objects_clear(void)
 {
     // clean the objects
     Object *obj = objects;
     Object *end = objects + _numLocalObjects;
     for ( ; obj != end ; ++obj)
         obj->obj_nr = 0;
+}
 
+void setupRoomObjects(HROOM r)
+{
     esx_f_seek(r, 20, ESX_SEEK_SET);
     uint8_t numObj = readByte(r);
 
@@ -76,10 +81,12 @@ void setupRoomObjects(HROOM r)
 		od->parent = readByte(r); // 12
 
         od->walk_x = readByte(r); // 13
-        od->walk_y = readByte(r) & 0x1f; // 14
+        // walk_y resolution is 2 pixels
+        od->walk_y = (readByte(r) & 0x1f) * 4; // 14
         uint8_t b15 = readByte(r); // 15
         od->actordir = b15 & 7;
         od->height = (b15 & 0xf8) / 8;
+        // TODO: fix name offset
         od->nameOffs = readByte(r); // 16 - name offset
 
         DEBUG_PRINTF("Load object %u x=%u y=%u walkx=%u walky=%u w=%u h=%u p=%u ps=%u actdir=%u nameOffs=%u\n",
@@ -89,7 +96,7 @@ void setupRoomObjects(HROOM r)
         uint8_t ev = readByte(r);
         while (ev)
         {
-            uint8_t offs = readByte(r); // or word??
+            uint8_t offs = readByte(r);
             DEBUG_PRINTF("-- script for event 0x%x offs 0x%x\n", ev, offs);
             ev = readByte(r);
         }
@@ -103,9 +110,6 @@ void setupRoomObjects(HROOM r)
             ev = readByte(r);
         }
         DEBUG_PUTC('\n');
-
-        // object script follows
-        //od->scriptOffset = esx_f_fgetpos(r);
     }
 }
 
@@ -140,4 +144,117 @@ Object *object_find(uint16_t x, uint16_t y)
 	}
 
     return NULL;
+}
+
+void readGlobalObjects(HROOM r)
+{
+    int i;
+	for (i = 0 ; i != _numGlobalObjects ; i++)
+    {
+	 	uint8_t tmp = readByte(r);
+        //DEBUG_PRINTF("global %u owner %u state %u\n", i, tmp & 15, tmp >> 4);
+        objectOwnerTable[i] = tmp & 15;//OF_OWNER_MASK;
+        objectStateTable[i] = tmp >> 4;//OF_STATE_SHL;
+	}
+}
+
+uint8_t object_getOwner(uint16_t id)
+{
+    return objectOwnerTable[id];
+}
+
+void object_setOwner(uint16_t id, uint8_t owner)
+{
+    DEBUG_PRINTF("Get owner %u for %u\n", owner, id);
+    objectOwnerTable[id] = owner;
+}
+
+int8_t object_whereIs(uint16_t id)
+{
+	// Note: in MM v0 bg objects are greater _numGlobalObjects
+	if (id >= _numGlobalObjects)
+		return WIO_NOT_FOUND;
+
+	if (id < 1)
+		return WIO_NOT_FOUND;
+
+	if (objectOwnerTable[id] != OF_OWNER_ROOM)
+	{
+		// for (i = 0; i < _numInventory; i++)
+		// 	if (inventory[i] == id)
+		// 		return WIO_INVENTORY;
+		return WIO_NOT_FOUND;
+	}
+
+    Object *obj = object_get(id);
+    if (obj)
+    {
+        // if (_objs[i].fl_object_index)
+        // 	return WIO_FLOBJECT;
+        return WIO_ROOM;
+    }
+
+	return WIO_NOT_FOUND;
+}
+
+uint16_t object_getVerbEntrypoint(uint16_t obj, uint16_t entry)
+{
+	if (object_whereIs(obj) == WIO_NOT_FOUND)
+		return 0;
+
+    uint16_t ptr = object_get(obj)->OBCDoffset;
+    ptr += 15;
+
+    uint8_t res = 0;
+    HROOM r = openRoom(currentRoom);
+    seekToOffset(r, ptr);
+    do
+    {
+        uint8_t e = readByte(r);
+        if (e == 0)
+        {
+            res = 0;
+            break;
+        }
+        res = readByte(r);
+        if (e == entry || e == 0xff)
+            break;
+    }
+    while (1);
+    closeRoom(r);
+
+    //DEBUG_PRINTF("Verb entry for %d is %d\n", entry, res);
+    return res;
+}
+
+uint8_t object_getState(uint16_t id)
+{
+    // I knew LucasArts sold cracked copies of the original Maniac Mansion,
+    // at least as part of Day of the Tentacle. Apparently they also sold
+    // cracked versions of the enhanced version. At least in Germany.
+    //
+    // This will keep the security door open at all times. I can only
+    // assume that 182 and 193 each correspond to one particular side of
+    // it. Fortunately this does not prevent frustrated players from
+    // blowing up the mansion, should they feel the urge to.
+
+    // if (_game.id == GID_MANIAC && _game.version != 0 && (obj == 182 || obj == 193))
+    // 	_objectStateTable[obj] |= kObjectState_08;
+
+    return objectStateTable[id];
+}
+
+void object_setState(uint16_t id, uint8_t s)
+{
+    objectStateTable[id] = s;
+}
+
+void object_getXY(uint16_t id, uint8_t *x, uint8_t *y)
+{
+    Object *obj = object_get(id);
+    *x = obj->walk_x;
+    *y = obj->walk_y;
+
+    // x = x >> V12_X_SHIFT;
+    // y = y >> V12_Y_SHIFT;
 }

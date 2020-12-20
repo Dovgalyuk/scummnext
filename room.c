@@ -9,23 +9,25 @@
 
 uint8_t currentRoom;
 uint8_t roomWidth;
+uint8_t roomHeight;
 static uint16_t entryScriptOffs;
+static uint16_t exitScriptOffs;
 
 static void setupRoomSubBlocks(void)
 {
     HROOM r = openRoom(currentRoom);
     uint16_t size = readWord(r);
     readWord(r);
-    roomWidth = readWord(r);
-    //uint16_t height = readWord(r) * 8;
+    roomWidth = readWord(r); // *8?
+    roomHeight = readWord(r); // *8 ?
     esx_f_seek(r, 20, ESX_SEEK_SET);
     uint8_t numObj = readByte(r);
     uint8_t matrixOffs = readByte(r);
     uint8_t numSnd = readByte(r);
     uint8_t numScript = readByte(r);
-    uint16_t exitOffs = readWord(r);
+    exitScriptOffs = readWord(r);
     entryScriptOffs = readWord(r);
-    uint16_t exitLen = entryScriptOffs - exitOffs;// + 4;
+    uint16_t exitLen = entryScriptOffs - exitScriptOffs;// + 4;
     uint16_t entryLen = size - entryScriptOffs;// + 4;
     // offset 28 - objects start here
 
@@ -97,9 +99,6 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 	// 	}
 	// }
 
-	// if (VAR_NEW_ROOM != 0xFF)
-	// 	VAR(VAR_NEW_ROOM) = room;
-
 	// killScriptsAndResources();
 
 	// clearDrawQueues();
@@ -119,24 +118,31 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
 	// _res->increaseResourceCounters();
 
-	currentRoom = room;
 	scummVars[VAR_ROOM] = room;
+
+    if (exitScriptOffs)
+    {
+        runRoomScript(-1, currentRoom, exitScriptOffs);
+    }
+
+	currentRoom = room;
 
     // _roomResource = room;
 
-	// if (VAR_ROOM_RESOURCE != 0xFF)
-	// 	VAR(VAR_ROOM_RESOURCE) = _roomResource;
+	scummVars[VAR_ROOM_RESOURCE] = room;
 
 	// if (room != 0)
 	// 	ensureResourceLoaded(rtRoom, room);
 
-	// clearRoomObjects();
+	objects_clear();
 
-	// if (_currentRoom == 0) {
-	// 	_ENCD_offs = _EXCD_offs = 0;
+	if (currentRoom == 0)
+    {
 	// 	_numObjectsInRoom = 0;
-	// 	return;
-	// }
+        exitScriptOffs = 0;
+        entryScriptOffs = 0;
+	 	return;
+	}
 
 	setupRoomSubBlocks();
 	// resetRoomSubBlocks();
@@ -145,15 +151,8 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
 	//resetRoomObjects();
 
-	// if (VAR_ROOM_WIDTH != 0xFF && VAR_ROOM_HEIGHT != 0xFF) {
-	// 	VAR(VAR_ROOM_WIDTH) = _roomWidth;
-	// 	VAR(VAR_ROOM_HEIGHT) = _roomHeight;
-	// }
-
-	// if (VAR_CAMERA_MIN_X != 0xFF)
-	// 	VAR(VAR_CAMERA_MIN_X) = _screenWidth / 2;
-	// if (VAR_CAMERA_MAX_X != 0xFF)
-	// 	VAR(VAR_CAMERA_MAX_X) = _roomWidth - (_screenWidth / 2);
+	scummVars[VAR_CAMERA_MIN_X] = SCREEN_WIDTH / 2;
+    scummVars[VAR_CAMERA_MAX_X] = roomWidth - SCREEN_WIDTH / 2;
 
     camera_setX(roomWidth / 2);
     // camera._mode = kNormalCameraMode;
@@ -164,7 +163,7 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
 	// memset(gfxUsageBits, 0, sizeof(gfxUsageBits));
 
-	// showActors();
+	actors_show();
 
 	// _egoPositioned = false;
 

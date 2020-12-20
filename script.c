@@ -10,10 +10,12 @@
 #include "graphics.h"
 #include "cursor.h"
 #include "verbs.h"
+#include "engine.h"
+#include "box.h"
 
 typedef struct Frame
 {
-    uint8_t id;
+    uint16_t id;
     uint8_t room;
     uint16_t roomoffs;
     uint16_t offset;
@@ -54,6 +56,19 @@ extern uint8_t scriptBytes[4096];
 
 #define FIRST_BANK 32
 
+typedef struct SentenceTab {
+	uint8_t verb;
+	uint8_t preposition;
+	uint16_t objectA;
+	uint16_t objectB;
+	uint8_t freezeCount;
+} SentenceTab;
+
+#define SENTENCE_SCRIPT 2
+#define MAX_SENTENCE 4
+static SentenceTab sentence[MAX_SENTENCE];
+static uint8_t sentenceNum;
+
 /////////////////////////////////////////////////////////////////////////
 // scripting internals
 /////////////////////////////////////////////////////////////////////////
@@ -62,7 +77,9 @@ static void loadScriptBytes(uint8_t s)
 {
     HROOM r = openRoom(stack[s].room);
     esx_f_seek(r, stack[s].roomoffs, ESX_SEEK_SET);
-    readResource(r, scriptBytes, sizeof(scriptBytes));
+    //readResource(r, scriptBytes, sizeof(scriptBytes));
+    // always read up to 4k, because object scripts do not include size field
+    readBuffer(r, scriptBytes, sizeof(scriptBytes));
     closeRoom(r);
     // for (int8_t i = 0 ; i < 16 ; ++i)
     //     DEBUG_PRINTF("%x ", scriptBytes[i]);
@@ -136,7 +153,7 @@ static void setResult(uint16_t value)
 	writeVar(stack[curScript].resultVarNumber, value);
 }
 
-static void stopScript(uint8_t index)
+static void stopScriptIdx(uint8_t index)
 {
     DEBUG_PRINTF("Stopping the script %u room %u/%u offset %x\n",
         stack[index].id, stack[index].room, stack[index].roomoffs,
@@ -146,9 +163,28 @@ static void stopScript(uint8_t index)
         exitFlag = 1;
 }
 
+static uint8_t getScriptIndex(uint8_t id)
+{
+    if (id == 0)
+        return MAX_SCRIPTS;
+    uint8_t i;
+    for (i = 0 ; i < MAX_SCRIPTS ; ++i)
+        if (stack[i].id == id)
+            break;
+    return i;
+}
+
+static void stopScript(uint8_t id)
+{
+    uint8_t idx = getScriptIndex(id);
+    if (idx == MAX_SCRIPTS)
+        return;
+    stopScriptIdx(idx);
+}
+
 static void op_stopObjectCode(void)
 {
-    stopScript(curScript);
+    stopScriptIdx(curScript);
 }
 
 static void op_stopScript(void)
@@ -169,9 +205,7 @@ static void op_stopScript(void)
     uint8_t i = curScript;
     if (s != 0)
     {
-        for (i = 0 ; i < MAX_SCRIPTS ; ++i)
-            if (stack[i].id == s)
-                break;
+        i = getScriptIndex(s);
         if (i == MAX_SCRIPTS)
         {
             DEBUG_PRINTF("Stopping the script %u which is not executing\n", s);
@@ -179,7 +213,7 @@ static void op_stopScript(void)
         }
     }
 
-    stopScript(i);
+    stopScriptIdx(i);
 }
 
 static void getResultPos(void)
@@ -187,7 +221,7 @@ static void getResultPos(void)
     stack[curScript].resultVarNumber = fetchScriptByte();
 }
 
-static void pushScript(uint8_t id, uint8_t room, uint16_t roomoffs, uint16_t offset)
+static void pushScript(uint16_t id, uint8_t room, uint16_t roomoffs, uint16_t offset)
 {
     uint8_t s = findEmptyFrame();
     DEBUG_PRINTF("Starting script %u room %u offset %u in frame %u\n", id, room, roomoffs, s);
@@ -202,7 +236,7 @@ static void pushScript(uint8_t id, uint8_t room, uint16_t roomoffs, uint16_t off
 
 static void parseString(uint8_t actor)
 {
-    uint8_t buffer[64];
+    uint8_t buffer[128];
     uint8_t *ptr = buffer;
 	uint8_t c;
 
@@ -264,11 +298,6 @@ static uint8_t isScriptRunning(uint8_t s)
     return 0;
 }
 
-static uint8_t getState(uint16_t obj)
-{
-    return 0;
-}
-
 static uint16_t getActiveObject(void)
 {
 	return getVarOrDirectWord(PARAM_1);
@@ -278,49 +307,19 @@ static void ifStateCommon(uint16_t type)
 {
 	uint8_t obj = getActiveObject();
 
-	jumpRelative((getState(obj) & type) != 0);
+	jumpRelative((object_getState(obj) & type) != 0);
 }
-
-static uint8_t strcopy(char *d, const char *s)
-{
-    char *d0 = d;
-    while (*d++ = *s++)
-        ;
-    // returns length in characters
-    return d - d0 - 1;
-}
-
-static uint8_t getObjOrActorName(char *s, uint8_t id)
-{
-    //	if (objIsActor(obj))
-    if (id < ACTOR_COUNT)
-    {
-        DEBUG_PRINTF("Name for actor %d\n", id);
-        return strcopy(s, actors[id].name);
-    }
-
-	// for (i = 0; i < _numNewNames; i++) {
-	// 	if (_newNames[i] == obj) {
-	// 		debug(5, "Found new name for object %d at _newNames[%d]", obj, i);
-	// 		return getResourceAddress(rtObjectName, i);
-	// 	}
-	// }
-
-    Object *obj = object_get(id);
-    if (!obj->OBCDoffset)
-        return 0;
-    DEBUG_PRINTF("Name for object %d\n", id);
-    HROOM r = openRoom(currentRoom);
-    seekToOffset(r, obj->OBCDoffset + obj->nameOffs);
-    uint8_t len = readString(r, s);
-    closeRoom(r);
-    return len;
-}
-
 
 ///////////////////////////////////////////////////////////
 // opcodes
 ///////////////////////////////////////////////////////////
+
+static void op_breakHere(void)
+{
+    //DEBUG_PUTS("breakHere\n");
+    //stopScript();
+    exitFlag = 1;
+}
 
 static void op_putActor(void)
 {
@@ -345,9 +344,6 @@ static void op_getActorRoom(void)
 
 static void op_drawObject(void)
 {
-	uint8_t i;
-	// ObjectData *od;
-	// uint16 x, y, w, h;
 	uint8_t xpos, ypos;
     uint16_t idx;
 
@@ -357,7 +353,7 @@ static void op_drawObject(void)
     DEBUG_PRINTF("Draw object %u at %u,%u\n", idx, xpos, ypos);
 
     Object *obj = object_get(idx);
-    DEBUG_ASSERT(obj, "op_drawObject");
+    //DEBUG_ASSERT(obj, "op_drawObject");
 
 	if (xpos != 0xFF)
     {
@@ -381,35 +377,35 @@ static void op_drawObject(void)
 	// 		putState(_objs[i].obj_nr, getState(_objs[i].obj_nr) & ~kObjectState_08);
 	// }
 
+    object_setState(idx, object_getState(idx) | kObjectState_08);
 	// putState(obj, getState(od->obj_nr) | kObjectState_08);
 }
 
 static void op_setState08(void)
 {
  	uint16_t j = getVarOrDirectWord(PARAM_1);
-    Object *obj = object_get(j);
+    //Object *obj = object_get(j);
     //DEBUG_ASSERT(obj, "op_setState08");
-    DEBUG_PRINTF("setState08 %u\n", obj->obj_nr);
+    DEBUG_PRINTF("setState08 %u\n", j);
 
-    obj->state |= kObjectState_08;
-	graphics_drawObject(obj);
-
-	// putState(obj, getState(obj) | kObjectState_08);
+    object_setState(j, object_getState(j) | kObjectState_08);
 	// markObjectRectAsDirty(obj);
 	// clearDrawObjectQueue();
+
+	graphics_drawObject(object_get(j));
 }
 
 static void op_clearState08(void)
 {
     uint16_t j = getActiveObject();
-    Object *obj = object_get(j);
-    DEBUG_PRINTF("clearState08 %u\n", obj->obj_nr);
-    obj->state &= ~kObjectState_08;
-    //putState(obj, getState(obj) & ~kObjectState_08);
+    //Object *obj = object_get(j);
+    DEBUG_PRINTF("clearState08 %u\n", j);
+
+    object_setState(j, object_getState(j) & ~kObjectState_08);
     //markObjectRectAsDirty(obj);
     //clearDrawObjectQueue();
 
-	graphics_drawObject(obj);
+	graphics_drawObject(object_get(j));
 }
 
 static void op_resourceRoutines(void)
@@ -435,6 +431,27 @@ static void op_panCameraTo(void)
 {
     //DEBUG_PUTS("panCameraTo\n");
     camera_panTo(getVarOrDirectByte(PARAM_1));
+}
+
+static void op_walkActorToActor(void)
+{
+	uint8_t nr = getVarOrDirectByte(PARAM_1);
+	uint8_t nr2 = getVarOrDirectByte(PARAM_2);
+	uint8_t dist = fetchScriptByte();
+
+	if (!actor_isInCurrentRoom(nr))
+		return;
+
+	if (!actor_isInCurrentRoom(nr2))
+		return;
+
+	actor_walkToActor(nr, nr2, dist);
+}
+
+static void op_getObjectOwner(void)
+{
+	getResultPos();
+	setResult(object_getOwner(getVarOrDirectWord(PARAM_1)));
 }
 
 static void op_move(void)
@@ -474,6 +491,11 @@ static void op_walkActorTo(void)
     actor_startWalk(act, x, y);
 }
 
+static void op_stopMusic(void)
+{
+    // nothig but stop all sounds
+}
+
 static void op_putActorInRoom(void)
 {
 	uint8_t act = getVarOrDirectByte(PARAM_1);
@@ -481,11 +503,19 @@ static void op_putActorInRoom(void)
     actor_setRoom(act, room);
 }
 
+static void op_waitForMessage(void)
+{
+	if (scummVars[VAR_HAVE_MSG])
+    {
+		stack[curScript].offset--;
+		op_breakHere();
+	}
+}
+
 static void op_actorOps(void)
 {
 	uint8_t act = getVarOrDirectByte(PARAM_1);
 	uint8_t arg = getVarOrDirectByte(PARAM_2);
-    uint8_t i;
 
 	uint8_t opcode = fetchScriptByte();
 	if (act == 0 && opcode == 5) {
@@ -539,6 +569,31 @@ static void op_actorOps(void)
 static void op_print(void)
 {
     uint8_t act = getVarOrDirectByte(PARAM_1);
+    DEBUG_PRINTF("print(%u, ", act);
+    parseString(act);
+    DEBUG_PUTS(")\n");
+}
+
+static void op_putActorAtObject(void)
+{
+    uint8_t x, y;
+    uint8_t a = getVarOrDirectByte(PARAM_1);
+	uint8_t obj = getVarOrDirectWord(PARAM_2);
+	if (object_whereIs(obj) != WIO_NOT_FOUND)
+    {
+		object_getXY(obj, &x, &y);
+        boxes_adjustXY(&x, &y);
+	} else {
+		x = 30 / 8;
+		y = 60 / 8;
+	}
+
+    actor_put(a, x, y);
+}
+
+static void op_printEgo(void)
+{
+    uint8_t act = scummVars[VAR_EGO];
     DEBUG_PRINTF("print(%u, ", act);
     parseString(act);
     DEBUG_PUTS(")\n");
@@ -663,11 +718,10 @@ static void op_isSoundRunning(void)
 	setResult(snd);
 }
 
-static void op_breakHere(void)
+void op_equalZero()
 {
-    //DEBUG_PUTS("breakHere\n");
-    //stopScript();
-    exitFlag = 1;
+	uint16_t a = getVar();
+	jumpRelative(a == 0);
 }
 
 static void op_delayVariable(void)
@@ -681,6 +735,13 @@ static void op_assignVarByte(void)
 {
 	getResultPos();
 	setResult(fetchScriptByte());
+}
+
+static void op_isGreaterEqual(void)
+{
+	uint16_t a = getVar();
+	uint16_t b = getVarOrDirectWord(PARAM_1);
+	jumpRelative(b >= a);
 }
 
 static void op_isNotEqual(void)
@@ -765,12 +826,50 @@ static void op_getActorX(void)
     setResult(actor_getX(getVarOrDirectByte(PARAM_1)));
 }
 
+static void op_isLess(void)
+{
+	uint16_t a = getVar();
+	uint16_t b = getVarOrDirectWord(PARAM_1);
+
+	jumpRelative(b < a);
+}
+
+static void op_increment(void)
+{
+	getResultPos();
+	setResult(scummVars[stack[curScript].resultVarNumber] + 1);
+}
+
 static void op_isEqual(void)
 {
     uint8_t var = fetchScriptByte();
 	uint16_t a = readVar(var);
 	uint16_t b = getVarOrDirectWord(PARAM_1);
 	jumpRelative(b == a);
+}
+
+static void op_pickupObject(void)
+{
+	int id = getVarOrDirectWord(PARAM_1);
+
+    Object *obj = object_get(id);
+	if (!obj)
+		return;
+
+	if (object_whereIs(id) == WIO_INVENTORY)	/* Don't take an */
+		return;											/* object twice */
+
+    DEBUG_PRINTF("Pickup object %u by %u\n", id, scummVars[VAR_EGO]);
+
+	//addObjectToInventory(obj, _roomResource);
+	//markObjectRectAsDirty(obj);
+    object_setOwner(id, scummVars[VAR_EGO]);
+	object_setState(id, object_getState(id) | kObjectState_08 | kObjectStateUntouchable);
+	//clearDrawObjectQueue();
+
+	//runInventoryScript(1);
+	//if (_game.platform == Common::kPlatformNES)
+    //		_sound->addSoundToQueue(51);	// play 'pickup' sound
 }
 
 static void op_actorFollowCamera(void)
@@ -860,6 +959,7 @@ static void op_loadRoomWithEgo(void)
 
 	uint16_t obj = getVarOrDirectWord(PARAM_1);
 	uint8_t room = getVarOrDirectByte(PARAM_2);
+    uint8_t ego = scummVars[VAR_EGO];
 
 	// a = derefActor(VAR(VAR_EGO), "o2_loadRoomWithEgo");
 
@@ -872,31 +972,34 @@ static void op_loadRoomWithEgo(void)
 	// 	a->putActor(0, 0, room);
 	// }
 	// _egoPositioned = false;
+    actor_put(ego, 0, 0);
+    actor_setRoom(ego, room);
 
 	int8_t x = fetchScriptByte();
 	int8_t y = fetchScriptByte();
 
-	// startScene(a->_room, a, obj);
+	startScene(room);
 
-	// getObjectXYPos(obj, x2, y2, dir);
-	// AdjustBoxResult r = a->adjustXYToBeInBox(x2, y2);
-	// x2 = r.x;
-	// y2 = r.y;
-	// a->putActor(x2, y2, _currentRoom);
+    uint8_t x2, y2;
+    object_getXY(obj, &x2, &y2);
+    boxes_adjustXY(&x2, &y2);
+    actor_put(ego, x2, y2);
 	// a->setDirection(dir + 180);
 
 	// camera._dest.x = camera._cur.x = a->getPos().x;
 	// setCameraAt(a->getPos().x, a->getPos().y);
-	// setCameraFollows(a);
+    camera_setX(actors[ego].x);
+    camera_followActor(ego);
 
 	// _fullRedraw = true;
 
 	// resetSentence();
 
-	// if (x >= 0 && y >= 0) {
-	// 	a->startWalkActor(x, y, -1);
-	// }
-	runScript(5);
+	if (x >= 0 && y >= 0) {
+        actor_startWalk(ego, x, y);
+    }
+    // script is started in startScene
+	//runScript(5);
 }
 
 static void op_isScriptRunning(void)
@@ -904,6 +1007,17 @@ static void op_isScriptRunning(void)
 //    DEBUG_PUTS("isScriptRunning\n");
 	getResultPos();
 	setResult(isScriptRunning(getVarOrDirectByte(PARAM_1)));
+}
+
+static void op_setOwnerOf(void)
+{
+	uint16_t obj;
+    uint8_t owner;
+
+	obj = getVarOrDirectWord(PARAM_1);
+	owner = getVarOrDirectByte(PARAM_2);
+
+	object_setOwner(obj, owner);
 }
 
 static void op_lights(void)
@@ -950,6 +1064,19 @@ static void op_switchCostumeSet(void)
     graphics_loadCostumeSet(fetchScriptByte());
 }
 
+static void op_getBitVar(void)
+{
+	getResultPos();
+	int var = fetchScriptWord();
+	uint8_t a = getVarOrDirectByte(PARAM_1);
+
+	int bit_var = var + a;
+	int bit_offset = bit_var & 0x0f;
+	bit_var >>= 4;
+
+	setResult((scummVars[bit_var] & (1 << bit_offset)) ? 1 : 0);
+}
+
 static void op_endCutscene(void)
 {
     scummVars[VAR_OVERRIDE] = 0;
@@ -978,13 +1105,23 @@ static void op_findObject(void)
 	// }
     if (obj)
     {
-        DEBUG_PRINTF("Found object %d x=%d y=%d\n", obj->obj_nr, obj->x, obj->y);
+        //DEBUG_PRINTF("Found object %d x=%d y=%d\n", obj->obj_nr, obj->x, obj->y);
 	    setResult(obj->obj_nr);
     }
     else
     {
         setResult(0);
     }
+}
+
+static void op_walkActorToObject(void)
+{
+	uint8_t actor = getVarOrDirectByte(PARAM_1);
+	uint16_t obj = getVarOrDirectWord(PARAM_2);
+    DEBUG_PRINTF("Actor %u walk to object %u\n", actor, obj);
+	if (object_whereIs(obj) != WIO_NOT_FOUND) {
+		actor_walkToObject(actor, obj);
+	}
 }
 
 static void op_drawSentence(void)
@@ -1076,8 +1213,8 @@ static void op_doSentence(void)
 
     verb = getVarOrDirectByte(PARAM_1);
     if (verb == 0xFC) {
-        // _sentenceNum = 0;
-        // stopScript(SENTENCE_SCRIPT);
+        sentenceNum = 0;
+        stopScript(SENTENCE_SCRIPT);
         return;
     }
     if (verb == 0xFB) {
@@ -1085,37 +1222,41 @@ static void op_doSentence(void)
         return;
     }
 
-	//st = &_sentence[_sentenceNum++];
+	SentenceTab *st = &sentence[sentenceNum++];
 
-    uint16_t objectA = getVarOrDirectWord(PARAM_2);
-    uint16_t objectB = getVarOrDirectWord(PARAM_3);
+	st->verb = verb;
+	st->objectA = getVarOrDirectWord(PARAM_2);
+	st->objectB = getVarOrDirectWord(PARAM_3);
+	st->preposition = (st->objectB != 0);
+	st->freezeCount = 0;
+
 	uint8_t opcode = fetchScriptByte();
-    DEBUG_PRINTF("doSentence %d %d %d %d\n", verb, objectA, objectB, opcode);
+    DEBUG_PRINTF("doSentence %d: %d %d %d\n", opcode, verb, st->objectA, st->objectB);
 	switch (opcode) {
 	case 0:
 		// Do nothing (besides setting up the sentence above)
 		break;
 	case 1:
 		// Execute the sentence
-		//_sentenceNum--;
+		sentenceNum--;
 
 		if (verb == 254) {
 			//ScummEngine::stopObjectScript(st->objectA);
 		} else {
 			// bool isBackgroundScript;
 			// bool isSpecialVerb;
-			// if (verb != 253 && verb != 250) {
-			// 	scummVars[VAR_ACTIVE_VERB] = verb;
-			// 	scummVars[VAR_ACTIVE_OBJECT1] = objectA;
-			// 	scummVars[VAR_ACTIVE_OBJECT2] = objectB;
+			if (verb != 253 && verb != 250) {
+				scummVars[VAR_ACTIVE_VERB] = verb;
+				scummVars[VAR_ACTIVE_OBJECT1] = st->objectA;
+				scummVars[VAR_ACTIVE_OBJECT2] = st->objectB;
 
 			// 	isBackgroundScript = false;
 			// 	isSpecialVerb = false;
-			// } else {
+			} else {
 			// 	isBackgroundScript = (st->verb == 250);
 			// 	isSpecialVerb = true;
-			// 	verb = 253;
-			// }
+				verb = 253;
+			}
 
 			// Check if an object script for this object is already running. If
 			// so, reuse its script slot. Note that we abuse two script flags:
@@ -1139,15 +1280,16 @@ static void op_doSentence(void)
 			// }
 
 			// runObjectScript(st->objectA, st->verb, isBackgroundScript, isSpecialVerb, NULL, slot);
+            runObjectScript(st->objectA, st->verb);
 		}
 		break;
 	case 2:
 		// Print the sentence
-		//_sentenceNum--;
+		sentenceNum--;
 
 		scummVars[VAR_SENTENCE_VERB] = verb;
-		scummVars[VAR_SENTENCE_OBJECT1] = objectA;
-		scummVars[VAR_SENTENCE_OBJECT2] = objectB;
+		scummVars[VAR_SENTENCE_OBJECT1] = st->objectA;
+		scummVars[VAR_SENTENCE_OBJECT2] = st->objectB;
 
         op_drawSentence();
 		break;
@@ -1157,9 +1299,26 @@ static void op_doSentence(void)
 	}
 }
 
+static void op_getDist(void)
+{
+	getResultPos();
+
+	uint16_t o1 = getVarOrDirectWord(PARAM_1);
+	uint16_t o2 = getVarOrDirectWord(PARAM_2);
+
+    uint16_t r = getObjActToObjActDist(o1, o2);
+
+	setResult(r);
+}
+
 static void op_ifState01(void)
 {
     ifStateCommon(kObjectStatePickupable);
+}
+
+static void op_ifState08(void)
+{
+    ifStateCommon(kObjectState_08);
 }
 
 void executeScript(void)
@@ -1199,8 +1358,20 @@ void executeScript(void)
         case 0x07:
             op_setState08();
             break;
+        case 0x08:
+            op_isNotEqual();
+            break;
         case 0x0c:
             op_resourceRoutines();
+            break;
+        case 0x0d:
+            op_walkActorToActor();
+            break;
+        case 0x0e:
+            op_putActorAtObject();
+            break;
+        case 0x10:
+            op_getObjectOwner();
             break;
         case 0x11:
             op_animateActor();
@@ -1221,6 +1392,9 @@ void executeScript(void)
         case 0x18:
             op_jumpRelative();
             break;
+        case 0x19:
+            op_doSentence();
+            break;
         case 0x1a:
             op_move();
             break;
@@ -1234,9 +1408,18 @@ void executeScript(void)
         case 0x1e:
             op_walkActorTo();
             break;
-        // case 0x26:
-        //     op_setVarRange();
-        //     break;
+        case 0x20:
+            op_stopMusic();
+            break;
+        case 0x24:
+            op_loadRoomWithEgo();
+            break;
+        case 0x26:
+            op_setVarRange();
+            break;
+        case 0x28:
+            op_equalZero();
+            break;
         case 0x2b:
             op_delayVariable();
             break;
@@ -1270,11 +1453,23 @@ void executeScript(void)
         case 0x43:
             op_getActorX();
             break;
+        case 0x44:
+            op_isLess();
+            break;
+        case 0x46:
+            op_increment();
+            break;
         case 0x47:
             op_clearState08();
             break;
         case 0x48:
             op_isEqual();
+            break;
+        case 0x4f:
+            op_ifState08();
+            break;
+        case 0x50:
+            op_pickupObject();
             break;
         case 0x52:
             op_actorFollowCamera();
@@ -1297,6 +1492,9 @@ void executeScript(void)
         case 0x68:
             op_isScriptRunning();
             break;
+        case 0x69:
+            op_setOwnerOf();
+            break;
         case 0x70:
             op_lights();
             break;
@@ -1315,8 +1513,26 @@ void executeScript(void)
         case 0x80:
             op_breakHere();
             break;
+        case 0x81:
+            op_putActor();
+            break;
+        case 0x84:
+            op_isGreaterEqual();
+            break;
+        case 0x85:
+            op_drawObject();
+            break;
         case 0x88:
             op_isNotEqual();
+            break;
+        case 0x90:
+            op_getObjectOwner();
+            break;
+        case 0x91:
+            op_getObjectOwner();
+            break;
+        case 0x94:
+            op_print();
             break;
         case 0x9a:
             op_move();
@@ -1330,20 +1546,56 @@ void executeScript(void)
         case 0xab:
             op_switchCostumeSet();
             break;
+        case 0xac:
+            op_drawSentence();
+            break;
+        case 0xad:
+            op_putActorInRoom();
+            break;
+        case 0xae:
+            op_waitForMessage();
+            break;
+        case 0xb1:
+            op_getBitVar();
+            break;
+        case 0xbb:
+            op_waitForActor();
+            break;
         case 0xc0:
             op_endCutscene();
             break;
         case 0xc8:
             op_isEqual();
             break;
+        case 0xce:
+            op_putActorAtObject();
+            break;
+        case 0xcf:
+            op_ifState08();
+            break;
+        case 0xd8:
+            op_printEgo();
+            break;
         case 0xd9:
             op_doSentence();
+            break;
+        case 0xf4:
+            op_getDist();
             break;
         case 0xf5:
             op_findObject();
             break;
+        case 0xf6:
+            op_walkActorToObject();
+            break;
         case 0xf9:
             op_doSentence();
+            break;
+        case 0xfa:
+            op_verbOps();
+            break;
+        case 0xfe:
+            op_walkActorTo();
             break;
         case 0xff:
             op_ifState01();
@@ -1356,11 +1608,22 @@ void executeScript(void)
     }
 }
 
-void runScript(uint8_t s)
+void runScript(uint16_t s)
 {
     DEBUG_PRINTF("New script id %u\n", s);
     pushScript(s, scripts[s].room, scripts[s].roomoffs, 4);
     //executeScript();
+}
+
+void runObjectScript(uint16_t objId, uint8_t verb)
+{
+    Object *obj = object_get(objId);
+    uint8_t offs = object_getVerbEntrypoint(objId, verb);
+    if (offs == 0)
+        return;
+    DEBUG_PRINTF("New object script %u for verb %u obcd=%d verbOffs=%d\n",
+        objId, verb, obj->OBCDoffset, offs);
+    pushScript(objId, currentRoom, obj->OBCDoffset + offs, 0);
 }
 
 void processScript(void)
@@ -1369,6 +1632,7 @@ void processScript(void)
     {
         if (stack[curScript].id)
         {
+            //DEBUG_PRINTF("Script %d\n", stack[curScript].id);
             exitFlag = 0;
             switchScriptPage(curScript);
             executeScript();
@@ -1376,7 +1640,7 @@ void processScript(void)
     }
 }
 
-void runRoomScript(uint8_t id, uint8_t room, uint16_t offs)
+void runRoomScript(uint16_t id, uint8_t room, uint16_t offs)
 {
     pushScript(id, room, offs, 0);
 }
@@ -1387,6 +1651,37 @@ enum {
 	MBS_MOUSE_MASK = (MBS_LEFT_CLICK | MBS_RIGHT_CLICK),
 	MBS_MAX_KEY	= 0x0200
 };
+
+/**
+ * The area in which some click (or key press) occurred and which is passed
+ * to the input script.
+ */
+enum ClickArea {
+	kVerbClickArea = 1,
+	kSceneClickArea = 2,
+	kInventoryClickArea = 3,
+	kKeyClickArea = 4,
+	kSentenceClickArea = 5
+};
+
+void runInputScript(uint8_t clickArea, uint16_t val)
+{
+    DEBUG_PRINTF("Run input script %d %d\n", clickArea, val);
+	scummVars[VAR_CLICK_AREA] = clickArea;
+	switch (clickArea)
+    {
+	case kVerbClickArea:		// Verb clicked
+		scummVars[VAR_CLICK_VERB] = val;
+		break;
+	case kInventoryClickArea:		// Inventory clicked
+		scummVars[VAR_CLICK_OBJECT] = val;
+		break;
+	default:
+		break;
+	}
+
+    runScript(4);
+}
 
 __sfr __banked __at 0x7ffe IO_7FFE;
 
@@ -1402,9 +1697,9 @@ void updateScummVars(void)
 
     // Adjust mouse coordinates as narrow rooms in NES are centered
     // if (_game.platform == Common::kPlatformNES && _NESStartStrip > 0) {
-    //     VAR(VAR_VIRT_MOUSE_X) -= 2;
-    //     if (VAR(VAR_VIRT_MOUSE_X) < 0)
-    //         VAR(VAR_VIRT_MOUSE_X) = 0;
+    scummVars[VAR_VIRT_MOUSE_X] -= 2;
+    if (scummVars[VAR_VIRT_MOUSE_X] < 0)
+        scummVars[VAR_VIRT_MOUSE_X] = 0;
     // }
 
 	// // 'B' is used to skip cutscenes in the NES version of Maniac Mansion
@@ -1415,9 +1710,6 @@ void updateScummVars(void)
 	// // On Alt-F5 prepare savegame for the original save/load dialog.
 	// if (lastKeyHit.keycode == Common::KEYCODE_F5 && lastKeyHit.hasFlags(Common::KBD_ALT)) {
 	// 	prepareSavegame();
-	// 	if (_game.id == GID_MANIAC && _game.version == 0) {
-	// 		runScript(2, 0, 0, 0);
-	// 	}
 	// 	if (_game.id == GID_MANIAC &&_game.platform == Common::kPlatformNES) {
 	// 		runScript(163, 0, 0, 0);
 	// 	}
@@ -1437,4 +1729,131 @@ void updateScummVars(void)
 	// 		VAR(VAR_KEYPRESS) = _mouseAndKeyboardStat;
 	// 	}
 	// }
+}
+
+void checkExecVerbs(void)
+{
+    uint16_t state = scummVars[VAR_KEYPRESS];
+	//if (_userPut <= 0 || _mouseAndKeyboardStat == 0)
+    if (!state)
+		return;
+
+	if (state < MBS_MAX_KEY) {
+		/* Check keypresses */
+		// vs = &_verbs[1];
+		// for (i = 1; i < _numVerbs; i++, vs++) {
+		// 	if (vs->verbid && vs->saveid == 0 && vs->curmode == 1) {
+		// 		if (_mouseAndKeyboardStat == vs->key) {
+		// 			// Trigger verb as if the user clicked it
+		// 			runInputScript(kVerbClickArea, vs->verbid, 1);
+		// 			return;
+		// 		}
+		// 	}
+		// }
+
+		// Simulate inventory picking and scrolling keys
+		// int object = -1;
+
+		// switch (_mouseAndKeyboardStat) {
+		// case 'u': // arrow up
+		// 	if (_inventoryOffset >= 2) {
+		// 		_inventoryOffset -= 2;
+		// 		redrawV2Inventory();
+		// 	}
+		// 	return;
+		// case 'j': // arrow down
+		// 	if (_inventoryOffset + 4 < getInventoryCount(_scummVars[VAR_EGO])) {
+		// 		_inventoryOffset += 2;
+		// 		redrawV2Inventory();
+		// 	}
+		// 	return;
+		// case 'i': // object
+		// 	object = 0;
+		// 	break;
+		// case 'o':
+		// 	object = 1;
+		// 	break;
+		// case 'k':
+		// 	object = 2;
+		// 	break;
+		// case 'l':
+		// 	object = 3;
+		// 	break;
+		// default:
+		// 	break;
+		// }
+
+		// if (object != -1) {
+		// 	object = findInventory(_scummVars[VAR_EGO], object + 1 + _inventoryOffset);
+		// 	if (object > 0)
+		// 		runInputScript(kInventoryClickArea, object, 0);
+		// 	return;
+		// }
+
+		// Generic keyboard input
+		//runInputScript(kKeyClickArea, _mouseAndKeyboardStat, 1);
+	} else if (state & MBS_MOUSE_MASK) {
+		uint8_t zone = graphics_findVirtScreen(cursorY);
+		const uint8_t code = state & MBS_LEFT_CLICK ? 1 : 2;
+		// const int inventoryArea = (_game.platform == Common::kPlatformNES) ? 48: 32;
+
+		// This could be kUnkVirtScreen.
+		// Fixes bug #1536932: "MANIACNES: Crash on click in speechtext-area"
+		// if (!zone)
+		// 	return;
+
+		if (zone == kVerbVirtScreen/* && _mouse.y <= zone->topline + 8*/)
+        {
+		// 	// Click into V2 sentence line
+		// 	runInputScript(kSentenceClickArea, 0, 0);
+		} else if (zone == kVerbVirtScreen && cursorY > SCREEN_TOP + SCREEN_HEIGHT + 6)
+        {
+		// 	// Click into V2 inventory
+		// 	int object = checkV2Inventory(_mouse.x, _mouse.y);
+		// 	if (object > 0)
+		// 		runInputScript(kInventoryClickArea, object, 0);
+		}
+        else
+        {
+		// 	over = findVerbAtPos(_mouse.x, _mouse.y);
+			//if (over != 0) {
+		// 		// Verb was clicked
+		// 		runInputScript(kVerbClickArea, _verbs[over].verbid, code);
+			//} else {
+				// Scene was clicked
+				runInputScript((zone == kMainVirtScreen) ? kSceneClickArea : kVerbClickArea, 0);
+			//}
+		}
+	}
+}
+
+static uint8_t isScriptInUse(uint8_t id)
+{
+    uint8_t i = getScriptIndex(id);
+    return i != MAX_SCRIPTS;
+}
+
+void checkAndRunSentenceScript(void)
+{
+	if (isScriptInUse(2))
+        return;
+
+	if (!sentenceNum || sentence[sentenceNum - 1].freezeCount)
+		return;
+
+	sentenceNum--;
+	SentenceTab *st = &sentence[sentenceNum];
+
+    if (st->preposition && st->objectB == st->objectA)
+        return;
+
+    scummVars[VAR_ACTIVE_VERB] = st->verb;
+    scummVars[VAR_ACTIVE_OBJECT1] = st->objectA;
+    scummVars[VAR_ACTIVE_OBJECT2] = st->objectB;
+    scummVars[VAR_VERB_ALLOWED] = (0 != object_getVerbEntrypoint(st->objectA, st->verb));
+    // DEBUG_PRINTF("Run script 2: verb=%d o1=%d o2=%d allow=%d\n",
+    //     scummVars[VAR_ACTIVE_VERB], scummVars[VAR_ACTIVE_OBJECT1],
+    //     scummVars[VAR_ACTIVE_OBJECT2], scummVars[VAR_VERB_ALLOWED]);
+
+    runScript(2);
 }

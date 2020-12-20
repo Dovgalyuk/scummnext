@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "resource.h"
 
+#define _numGlobalObjects 775
+
 enum ObjectStateV2 {
 	kObjectStatePickupable = 1,
 	kObjectStateUntouchable = 2,
@@ -18,6 +20,17 @@ enum ObjectStateV2 {
 	kObjectState_08 = 8
 };
 
+enum WhereIsObject {
+	WIO_NOT_FOUND = -1,
+	WIO_INVENTORY = 0,
+	WIO_ROOM = 1,
+	WIO_GLOBAL = 2,
+	WIO_LOCAL = 3,
+	WIO_FLOBJECT = 4
+};
+
+#define OF_OWNER_ROOM 0x0f
+
 typedef struct Object
 {
     uint16_t obj_nr;
@@ -25,18 +38,30 @@ typedef struct Object
     uint8_t walk_x, walk_y;
     uint8_t width, height;
     uint8_t actordir;
-    uint8_t state;
+    //uint8_t state;
     uint8_t parent;
     uint8_t parentstate;
     uint8_t nameOffs;
     uint16_t OBIMoffset;
     uint16_t OBCDoffset;
-    uint16_t scriptOffset;
 } Object;
 
 Object *object_get(uint16_t id);
 Object *object_find(uint16_t x, uint16_t y);
+int8_t object_whereIs(uint16_t id);
+uint16_t object_getVerbEntrypoint(uint16_t obj, uint16_t entry);
+
+uint8_t object_getOwner(uint16_t id);
+void object_setOwner(uint16_t id, uint8_t owner);
+
+uint8_t object_getState(uint16_t id);
+void object_setState(uint16_t id, uint8_t s);
+
+void object_getXY(uint16_t id, uint8_t *x, uint8_t *y);
 
 void setupRoomObjects(HROOM r);
+void objects_clear(void);
+
+void readGlobalObjects(HROOM r);
 
 #endif

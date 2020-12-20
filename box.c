@@ -282,6 +282,7 @@ uint8_t boxes_adjustXY(uint8_t *px, uint8_t *py)
 		// 	continue;
         uint8_t foundX, foundY;
         uint8_t dist = box_check_xy_in_bounds(&boxes[i], x, y, &foundX, &foundY);
+        //DEBUG_PRINTF("Dist %d(%d,%d) for box %d x=%d\n", dist, x, y, i, foundX);
 		if (dist == 0) {
 			*px = foundX;
 			*py = foundY;

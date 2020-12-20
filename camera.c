@@ -49,6 +49,24 @@ void camera_followActor(uint8_t actor)
     DEBUG_PRINTF("Camera is following actor %u\n", actor);
     cameraMode = kFollowActorCameraMode;
     cameraFollows = actor;
+
+	if (actors[actor].room != currentRoom)
+    {
+		startScene(actors[actor].room);
+		cameraX = actors[actor].x;
+		camera_setX(cameraX);
+	}
+
+	// t = a->getPos().x / 8 - _screenStartStrip;
+
+	// if (t < camera._leftTrigger || t > camera._rightTrigger || setCamera == true)
+	// 	setCameraAt(a->getPos().x, 0);
+
+	// for (i = 1; i < _numActors; i++) {
+	// 	if (_actors[i]->isInCurrentRoom())
+	// 		_actors[i]->_needRedraw = true;
+	// }
+	// runInventoryScript(0);
 }
 
 void camera_move(void)

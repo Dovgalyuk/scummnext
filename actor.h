@@ -47,9 +47,11 @@ extern int8_t talkDelay;
 
 void actors_walk(void);
 void actors_animate(void);
+void actors_show(void);
 
 uint8_t actor_getX(uint8_t actor);
 uint8_t actor_isMoving(uint8_t actor);
+uint8_t actor_isInCurrentRoom(uint8_t actor);
 
 void actor_setRoom(uint8_t actor, uint8_t room);
 void actor_setCostume(uint8_t actor, uint8_t costume);
@@ -57,5 +59,7 @@ void actor_put(uint8_t actor, uint8_t x, uint8_t y);
 void actor_talk(uint8_t actor, const char *s);
 void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y);
 void actor_animate(uint8_t actor, uint8_t anim);
+void actor_walkToObject(uint8_t actor, uint16_t obj_id);
+void actor_walkToActor(uint8_t actor, uint8_t toActor, uint8_t dist);
 
 #endif

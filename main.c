@@ -7,15 +7,10 @@
 #include "camera.h"
 #include "actor.h"
 #include "cursor.h"
+#include "object.h"
+#include "sprites.h"
 
-const int _numGlobalObjects = 775;
 const int _numRooms = 55;
-
-static const int v1MMNEScostTables[2][6] = {
-	/* desc lens offs data  gfx  pal */
-	{ 25,  27,  29,  31,  33,  35},
-	{ 26,  28,  30,  32,  34,  36}
-};
 
 // costumes 25-36 are special. see v1MMNEScostTables[] in costume.cpp
 // costumes 37-76 are room graphics resources
@@ -34,55 +29,18 @@ int _numFlObject = 50;
 
 int _shadowPaletteSize = 256;
 
-uint16_t getWord(uint8_t *p)
-{
-    return p[0] + p[1] * 0x100;
-}
-
-// not for sound
-// uint8_t *loadResource(Resource *res)
-// {
-//     // if (res.resource)
-//     //     return res.resource;
-//     HFILE f = openRoom(res->room);
-//     esx_f_seek(f, res->roomoffs, ESX_SEEK_SET);
-
-//     // old bundle
-//     uint16_t size = readWord(f);
-//     esx_f_seek(f, 2, ESX_SEEK_BWD);
-
-//     // read buffer
-//     uint8_t *buf = malloc(size);
-//     esx_f_read(f, buf, size);
-
-//     closeRoom(f);
-
-//     return buf;
-// }
-
-// uint8_t *loadCostume(int n)
-// {
-//     return loadResource(&costumes[n]);
-// }
-
 int main()
 {
     // init memory bank 0-16k
-    ZXN_WRITE_MMU0(2);
+    ZXN_WRITE_MMU0(3);
     //ZXN_WRITE_MMU1(32);
 
     int i;
     HROOM f = openRoom(0);
 
     uint16_t magic = readWord(f);
-	DEBUG_PRINTF("Magic %x\n", magic); /* version magic number */
-	for (i = 0; i != _numGlobalObjects; i++) {
-	 	uint8_t tmp = readByte(f);
-        //printf("global %u owner %u state %u\n", i, tmp & 15, tmp >> 4);
-
-	// 	_objectOwnerTable[i] = tmp & OF_OWNER_MASK;
-	// 	_objectStateTable[i] = tmp >> OF_STATE_SHL;
-	}
+	//DEBUG_PRINTF("Magic %x\n", magic); /* version magic number */
+    readGlobalObjects(f);
 
     // room offsets are always 0, skip them
     // 3 - roomno + roomoffs size
@@ -106,14 +64,11 @@ int main()
 
     closeRoom(f);
 
-    // decodeNESBaseTiles();
-    // while (1);
-
     initGraphics();
 
     // NES charset
     decodeNESTrTable();
-    decodeNESBaseTiles();
+    decodeTiles(0);
 
     // boot script
     runScript(1);
@@ -125,6 +80,8 @@ int main()
         camera_move();
         updateScummVars();
         processScript();
+        checkExecVerbs();
+        checkAndRunSentenceScript();
         cursor_animate();
 
         graphics_updateScreen();

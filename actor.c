@@ -5,6 +5,11 @@
 #include "costume.h"
 #include "box.h"
 #include "helper.h"
+#include "object.h"
+
+#define _standFrame    1
+#define _initFrame     2
+#define _talkStopFrame 4
 
 int8_t talkDelay;
 
@@ -234,7 +239,7 @@ void actor_put(uint8_t actor, uint8_t x, uint8_t y)
     a->moving = 0;
     a->x = x;
     a->y = y;
-    if (a->room == currentRoom)
+    if (actor_isInCurrentRoom(actor))
     {
         uint8_t box = boxes_adjustXY(&x, &y);
         a->x = x;
@@ -284,23 +289,56 @@ void actors_walk(void)
     uint8_t i;
     for (i = 0 ; i < ACTOR_COUNT ; ++i)
     {
-        if (actors[i].room == currentRoom && actors[i].moving)
+        if (actor_isInCurrentRoom(i) && actors[i].moving)
         {
             actor_walk(actors + i);
         }
     }
 }
 
-void actor_animate(uint8_t actor, uint8_t anim)
+static void startAnimActor(uint8_t actor, uint8_t f)
 {
-    // TODO: different commands and directions from void Actor::animateActor(int anim)
+    // TODO
 
     // then void Actor::startAnimActor(int f = anim/4)
     // _animProgress = 0;
     // _needRedraw = true;
     // _cost.animCounter = 0;
-	actors[actor].frame = anim / 4;
+    actors[actor].frame = f;
     actors[actor].anim.curpos = 0;
+}
+
+
+void actor_animate(uint8_t actor, uint8_t anim)
+{
+    // TODO: different commands and directions from void Actor::animateActor(int anim)
+
+    uint8_t cmd = anim / 4;
+    //dir = oldDirToNewDir(anim % 4);
+
+    // Convert into old cmd code
+    cmd = 0x3F - cmd + 2;
+
+	switch (cmd) {
+	case 2:				// stop walking
+        DEBUG_PRINTF("TODO: Actor %u stop walking\n", actor);
+		startAnimActor(actor, _standFrame);
+		// stopActorMoving();
+		break;
+	case 3:				// change direction immediatly
+        DEBUG_PRINTF("TODO: Actor %u set direction\n", actor);
+		// _moving &= ~MF_TURN;
+		// setDirection(dir);
+		break;
+	case 4:				// turn to new direction
+        DEBUG_PRINTF("TODO: Actor %u turn to direction\n", actor);
+		// turnToDirection(dir);
+		break;
+	case 64:
+	default:
+        startAnimActor(actor, anim / 4);
+        break;
+    }
 
     costume_updateAll();
 }
@@ -311,11 +349,76 @@ void actors_animate(void)
     for (i = 0 ; i < ACTOR_COUNT ; ++i)
     {
         // TODO: any other flags?
-        if (actors[i].room == currentRoom)
+        if (actor_isInCurrentRoom(i))
         {
             ++actors[i].anim.curpos;
             if (actors[i].anim.curpos >= actors[i].anim.frames)
                 actors[i].anim.curpos = 0;
         }
     }
+}
+
+void actor_walkToObject(uint8_t actor, uint16_t obj_id)
+{
+    Object *obj = object_get(obj_id);
+	// int x, y, dir;
+    uint8_t x = obj->walk_x;
+    uint8_t y = obj->walk_y;
+	// getObjectXYPos(obj, x, y, dir);
+
+    // TODO: calculate direction
+
+    boxes_adjustXY(&x, &y);
+    actor_startWalk(actor, x, y);
+	// Actor *a = derefActor(actor, "walkActorToObject");
+	// AdjustBoxResult r = a->adjustXYToBeInBox(x, y);
+	// x = r.x;
+	// y = r.y;
+
+	// a->startWalkActor(x, y, dir);
+}
+
+static void actor_show(uint8_t a)
+{
+    // if (_visible) return;
+
+//	adjustActorPos();
+    // _cost.reset();
+    startAnimActor(a, _standFrame);
+    startAnimActor(a, _initFrame);
+    startAnimActor(a, _talkStopFrame);
+	// stopActorMoving();
+    actors[a].moving = 0;
+	// _visible = true;
+	// _needRedraw = true;
+}
+
+void actors_show(void)
+{
+    uint8_t i;
+    for (i = 0 ; i < ACTOR_COUNT ; ++i)
+    {
+        if (actor_isInCurrentRoom(i))
+        {
+            actor_show(i);
+        }
+    }
+}
+
+uint8_t actor_isInCurrentRoom(uint8_t actor)
+{
+    return currentRoom && actors[actor].room == currentRoom;
+}
+
+void actor_walkToActor(uint8_t actor, uint8_t toActor, uint8_t dist)
+{
+	uint8_t x = actors[toActor].x;
+	uint8_t y = actors[toActor].y;
+	if (x < actors[actor].x)
+		x += dist;
+	else
+		x -= dist;
+
+    boxes_adjustXY(&x, &y);
+	actor_startWalk(actor, x, y);
 }

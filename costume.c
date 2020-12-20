@@ -4,6 +4,7 @@
 #include "resource.h"
 #include "graphics.h"
 #include "room.h"
+#include "sprites.h"
 #include "debug.h"
 
 static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
@@ -13,6 +14,7 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
     // costume ID -> v1MMNESLookup[] -> desc -> lens & offs -> data -> Gfx & pal
     // _baseptr = _vm->getResourceAddress(rtCostume, id);
     // _dataOffsets = _baseptr + 2;
+    //DEBUG_PRINTF("Decoding costume %d\n", costumes[act->costume]);
     HROOM src = seekResource(costumes + act->costume);
 
 	// int anim;
@@ -30,9 +32,9 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
     esx_f_seek(src, 2 * anim, ESX_SEEK_FWD);
     uint8_t begin = readByte(src);
     uint8_t end = readByte(src);
-    DEBUG_PRINTF("Decode animation of %u frames from %u\n", end, begin);
+    DEBUG_PRINTF("Decode animation %u of %u frames from %u\n", anim, end, begin);
     DEBUG_ASSERT(end <= MAX_FRAMES, "decodeNESCostume");
-    esx_f_seek(src, begin - 2 * anim - 1, ESX_SEEK_FWD);
+    esx_f_seek(src, begin - 2 * anim - 2, ESX_SEEK_FWD);
 
     // read all frames
     animation->frames = end;
@@ -47,7 +49,7 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
         // offset is the beginning
         // in scummvm data is decoded in backwards direction, from the end
         uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
-        DEBUG_PRINTF("decode frame=%u numspr=%u\n", frame, numSprites);
+        DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
         esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
 
         // bool flipped = (newDirToOldDir(a->getFacing()) == 1);
@@ -134,10 +136,16 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
 
 void costume_updateAll(void)
 {
-    // uint8_t i;
-    // for (i = 0 ; i < 64 ; ++i)
+    uint8_t i;
+
+    // we always need a sprite for the cursor
+    graphics_loadSpritePattern(SPRITE_CURSOR,
+        // some hack for cursor id
+        costdata_id == 32 ? 0xfe : 0xfa, 0x80, 1);
+
+    // for (i = 1 ; i < 64 ; ++i)
     // {
-    //     graphics_loadSpritePattern(i, i, 0x80, 0);
+    //     graphics_loadSpritePattern(i, i + 192, 0x80, 0);
     //     // send attributes
     //     IO_SPRITE_SLOT = i;
     //     IO_SPRITE_ATTRIBUTE = (i & 0xf) << 4; // x
@@ -146,17 +154,14 @@ void costume_updateAll(void)
     //     IO_SPRITE_ATTRIBUTE = 0xc0 | (i & 0x3f);
     //     IO_SPRITE_ATTRIBUTE = 0x80 | (i & 0x40); // anchor 4-bit sprite
     // }
+    // return;
     // DEBUG_HALT;
 
-    // // we always need a sprite for the cursor
-    graphics_loadSpritePattern(SPRITE_CURSOR, 0xfe, 0x80, 0);
-
     // decode costume sprites
-    uint8_t i;
     uint8_t nextSprite = 1;
     for (i = 0 ; i < ACTOR_COUNT ; ++i)
     {
-        if (actors[i].room == currentRoom)
+        if (currentRoom && actors[i].room == currentRoom)
         {
             DEBUG_ASSERT(nextSprite <= 63, "costume_updateAll");
             nextSprite = decodeNESCostume(&actors[i], nextSprite);

@@ -44,9 +44,12 @@
 
 extern int16_t scummVars[];
 
-void runScript(uint8_t s);
-void runRoomScript(uint8_t id, uint8_t room, uint16_t offs);
+void runScript(uint16_t s);
+void runRoomScript(uint16_t id, uint8_t room, uint16_t offs);
+void runObjectScript(uint16_t objectA, uint8_t verb);
 void processScript(void);
 void updateScummVars(void);
+void checkExecVerbs(void);
+void checkAndRunSentenceScript(void);
 
 #endif
