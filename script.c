@@ -12,18 +12,9 @@
 #include "verbs.h"
 #include "engine.h"
 #include "box.h"
+#include "string.h"
 
-typedef struct Frame
-{
-    uint16_t id;
-    uint8_t room;
-    uint16_t roomoffs;
-    uint16_t offset;
-    uint32_t delay;
-    uint16_t resultVarNumber;
-} Frame;
-
-#define MAX_SCRIPTS 8
+#define MAX_SCRIPTS 12
 
 enum {
     PARAM_1 = 0x80,
@@ -44,7 +35,6 @@ enum UserStates {
 
 #define _numVariables 800
 
-static Frame stack[MAX_SCRIPTS];
 int16_t scummVars[_numVariables];
 static uint8_t curScript;
 static uint8_t opcode;
@@ -53,6 +43,12 @@ static uint8_t exitFlag;
 // mapped in MMU1 to pages 32-...
 // can be switched for different scripts
 extern uint8_t scriptBytes[4096];
+extern uint16_t script_id;
+extern uint8_t script_room;
+extern uint16_t script_roomoffs;
+extern uint16_t script_offset;
+extern uint32_t script_delay;
+extern uint16_t script_resultVarNumber;
 
 #define FIRST_BANK 32
 
@@ -73,10 +69,16 @@ static uint8_t sentenceNum;
 // scripting internals
 /////////////////////////////////////////////////////////////////////////
 
+static void switchScriptPage(uint8_t s)
+{
+    //DEBUG_PRINTF("Select page %u\n", FIRST_BANK + s);
+    ZXN_WRITE_MMU1(FIRST_BANK + s);
+}
+
 static void loadScriptBytes(uint8_t s)
 {
-    HROOM r = openRoom(stack[s].room);
-    esx_f_seek(r, stack[s].roomoffs, ESX_SEEK_SET);
+    HROOM r = openRoom(script_room);
+    esx_f_seek(r, script_roomoffs, ESX_SEEK_SET);
     //readResource(r, scriptBytes, sizeof(scriptBytes));
     // always read up to 4k, because object scripts do not include size field
     readBuffer(r, scriptBytes, sizeof(scriptBytes));
@@ -90,20 +92,20 @@ static uint8_t findEmptyFrame(void)
 {
     uint8_t f;
     for (f = 0 ; f < MAX_SCRIPTS ; ++f)
-        if (stack[f].id == 0)
+    {
+        switchScriptPage(f);
+        if (script_id == 0)
+        {
+            switchScriptPage(curScript);
             return f;
+        }
+    }
     DEBUG_ASSERT(0, "Number of scripts exceeded\n");
-}
-
-static void switchScriptPage(uint8_t s)
-{
-    //DEBUG_PRINTF("Select page %u\n", FIRST_BANK + s);
-    ZXN_WRITE_MMU1(FIRST_BANK + s);
 }
 
 static uint8_t fetchScriptByte(void)
 {
-    return scriptBytes[stack[curScript].offset++];
+    return scriptBytes[script_offset++];
 }
 
 static uint16_t fetchScriptWord()
@@ -150,17 +152,19 @@ static int16_t getVarOrDirectWord(uint8_t mask)
 
 static void setResult(uint16_t value)
 {
-	writeVar(stack[curScript].resultVarNumber, value);
+	writeVar(script_resultVarNumber, value);
 }
 
 static void stopScriptIdx(uint8_t index)
 {
+    switchScriptPage(index);
     DEBUG_PRINTF("Stopping the script %u room %u/%u offset %x\n",
-        stack[index].id, stack[index].room, stack[index].roomoffs,
-        stack[index].offset - 4);
-    stack[index].id = 0;
+        script_id, script_room, script_roomoffs,
+        script_offset - 4);
+    script_id = 0;
     if (index == curScript)
         exitFlag = 1;
+    switchScriptPage(curScript);
 }
 
 static uint8_t getScriptIndex(uint8_t id)
@@ -169,8 +173,12 @@ static uint8_t getScriptIndex(uint8_t id)
         return MAX_SCRIPTS;
     uint8_t i;
     for (i = 0 ; i < MAX_SCRIPTS ; ++i)
-        if (stack[i].id == id)
+    {
+        switchScriptPage(i);
+        if (script_id == id)
             break;
+    }
+    switchScriptPage(curScript);
     return i;
 }
 
@@ -192,8 +200,8 @@ static void op_stopScript(void)
     uint8_t s = getVarOrDirectByte(PARAM_1);
 
     DEBUG_PRINTF("Stopping from script %u room %u/%u next offset %x\n",
-        stack[curScript].id, stack[curScript].room, stack[curScript].roomoffs,
-        stack[curScript].offset);
+        script_id, script_room, script_roomoffs,
+        script_offset);
 
     // WORKAROUND bug #4112: If you enter the lab while Dr. Fred has the powered turned off
     // to repair the Zom-B-Matic, the script will be stopped and the power will never turn
@@ -218,26 +226,26 @@ static void op_stopScript(void)
 
 static void getResultPos(void)
 {
-    stack[curScript].resultVarNumber = fetchScriptByte();
+    script_resultVarNumber = fetchScriptByte();
 }
 
 static void pushScript(uint16_t id, uint8_t room, uint16_t roomoffs, uint16_t offset)
 {
     uint8_t s = findEmptyFrame();
     DEBUG_PRINTF("Starting script %u room %u offset %u in frame %u\n", id, room, roomoffs, s);
-    stack[s].id = id;
-    stack[s].room = room;
-    stack[s].roomoffs = roomoffs;
-    stack[s].offset = offset;
     switchScriptPage(s);
+    script_id = id;
+    script_room = room;
+    script_roomoffs = roomoffs;
+    script_offset = offset;
     loadScriptBytes(s);
     switchScriptPage(curScript);
 }
 
 static void parseString(uint8_t actor)
 {
-    uint8_t buffer[128];
-    uint8_t *ptr = buffer;
+    uint8_t *message = message_new();
+    uint8_t *ptr = message;
 	uint8_t c;
 
 	while ((c = fetchScriptByte())) {
@@ -278,24 +286,21 @@ static void parseString(uint8_t actor)
 	// _string[textSlot].center = false;
 	// _string[textSlot].overhead = false;
 
-	actor_talk(actor, buffer);
+	actor_talk(actor, message);
 }
 
 static void jumpRelative(int cond)
 {
 	int16_t offset = fetchScriptWord();
 	if (!cond)
-		stack[curScript].offset += offset;
+		script_offset += offset;
 //    DEBUG_PRINTF("   jump to %x\n", stack[curScript].offset + offset);
 }
 
 static uint8_t isScriptRunning(uint8_t s)
 {
-    uint8_t i;
-    for (i = 0 ; i < MAX_SCRIPTS ; ++i)
-        if (stack[i].id == s)
-            return 1;
-    return 0;
+    uint8_t i = getScriptIndex(s);
+    return i != MAX_SCRIPTS;
 }
 
 static uint16_t getActiveObject(void)
@@ -507,7 +512,7 @@ static void op_waitForMessage(void)
 {
 	if (scummVars[VAR_HAVE_MSG])
     {
-		stack[curScript].offset--;
+		script_offset--;
 		op_breakHere();
 	}
 }
@@ -626,7 +631,7 @@ static void op_setVarRange(void)
 			b = fetchScriptByte();
 
 		setResult(b);
-		stack[curScript].resultVarNumber++;
+		script_resultVarNumber++;
 	} while (--a);
 }
 
@@ -726,7 +731,7 @@ void op_equalZero()
 
 static void op_delayVariable(void)
 {
-	stack[curScript].delay = getVar();
+	script_delay = getVar();
 	//vm.slot[_currentScript].status = ssPaused;
 	op_breakHere();
 }
@@ -763,7 +768,7 @@ static void op_delay(void)
     uint8_t b = fetchScriptByte() ^ 0xff;
     uint8_t c = fetchScriptByte() ^ 0xff;
     //DEBUG_PRINTF("delay %x %x %x\n", a, b, c);
-    stack[curScript].delay = a | (b << 8) | ((uint32_t)c << 16);
+    script_delay = a | (b << 8) | ((uint32_t)c << 16);
 	// vm.slot[_currentScript].status = ssPaused;
     op_breakHere();
 }
@@ -784,7 +789,7 @@ static void op_waitForActor(void)
 {
     uint8_t act = getVarOrDirectByte(PARAM_1);
 	if (actor_isMoving(act)) {
-		stack[curScript].offset -= 2;
+		script_offset -= 2;
 		op_breakHere();
 	}
 }
@@ -837,7 +842,7 @@ static void op_isLess(void)
 static void op_increment(void)
 {
 	getResultPos();
-	setResult(scummVars[stack[curScript].resultVarNumber] + 1);
+	setResult(scummVars[script_resultVarNumber] + 1);
 }
 
 static void op_isEqual(void)
@@ -893,7 +898,7 @@ static void op_add(void)
 	uint16_t a;
 	getResultPos();
 	a = getVarOrDirectWord(PARAM_1);
-	scummVars[stack[curScript].resultVarNumber] += a;
+	scummVars[script_resultVarNumber] += a;
 }
 
 static void setUserState(uint8_t state)
@@ -1129,7 +1134,7 @@ static void op_drawSentence(void)
 	// Common::Rect sentenceline;
 	// const byte *temp;
     uint8_t slot = verb_getSlot(scummVars[VAR_SENTENCE_VERB], 0);
-    char buf[61];
+    char *buf = message_new();
     char *s = buf;
 
 	// if (!((_userState & USERSTATE_IFACE_SENTENCE) ||
@@ -1204,7 +1209,7 @@ static void op_drawSentence(void)
 
     // TODO: special codes
     DEBUG_PRINTF("Draw sentence '%s'\n", buf);
-    graphics_print(buf);
+    message_print(buf);
 }
 
 static void op_doSentence(void)
@@ -1323,14 +1328,14 @@ static void op_ifState08(void)
 
 void executeScript(void)
 {
-    if (stack[curScript].delay)
+    if (script_delay)
     {
         //DEBUG_PRINTF("Delay %u\n", (uint16_t)delay);
         // if (delay > 100)
         //     delay -= 100;
         // else
         //     delay = 0;
-        --stack[curScript].delay;
+        --script_delay;
         return;
     }
     while (!exitFlag)
@@ -1630,11 +1635,11 @@ void processScript(void)
 {
     for (curScript = 0 ; curScript < MAX_SCRIPTS ; ++curScript)
     {
-        if (stack[curScript].id)
+        switchScriptPage(curScript);
+        if (script_id)
         {
             //DEBUG_PRINTF("Script %d\n", stack[curScript].id);
             exitFlag = 0;
-            switchScriptPage(curScript);
             executeScript();
         }
     }
@@ -1687,7 +1692,8 @@ __sfr __banked __at 0x7ffe IO_7FFE;
 
 void updateScummVars(void)
 {
-    // VAR(VAR_CAMERA_POS_X) = (camera._cur.x >> V12_X_SHIFT);
+    // updated in camera.c
+    //scummVars[VAR_CAMERA_POS_X] = cameraX >> V12_X_SHIFT;
 
     // We use shifts below instead of dividing by V12_X_MULTIPLIER resp.
     // V12_Y_MULTIPLIER to handle negative coordinates correctly.

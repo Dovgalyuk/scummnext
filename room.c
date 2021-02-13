@@ -48,7 +48,7 @@ static void setupRoomSubBlocks(void)
 
     DEBUG_PRINTF("Open room %u width %u objects %u boxes %u\n", currentRoom, roomWidth, numObj, numBoxes);
 
-    int i, j;
+    int i;
     for (i = 0 ; i < numBoxes ; ++i)
     {
         DEBUG_PRINTF("Box %d uy=%d ly=%d ulx=%d urx=%d llx=%d lrx=%d mask=%x flags=%x\n",
@@ -56,13 +56,14 @@ static void setupRoomSubBlocks(void)
             boxes[i].llx, boxes[i].lrx, boxes[i].mask, boxes[i].flags
         );
     }
-    uint8_t *ptr = boxesMatrix;
-    for (i = 0 ; i < numBoxes + 1 ; ++i)
-    {
-        for (j = 0 ; j < numBoxes ; ++j)
-            DEBUG_PRINTF("%d ", *ptr++);
-        DEBUG_PUTS("\n");
-    }
+    // int j;
+    // uint8_t *ptr = boxesMatrix;
+    // for (i = 0 ; i < numBoxes + 1 ; ++i)
+    // {
+    //     for (j = 0 ; j < numBoxes ; ++j)
+    //         DEBUG_PRINTF("%d ", *ptr++);
+    //     DEBUG_PUTS("\n");
+    // }
 
     decodeNESGfx(r);
     setupRoomObjects(r);
@@ -76,7 +77,7 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
 	// debugC(DEBUG_GENERAL, "Loading room %d", room);
 
-	// stopTalk();
+	actor_stopTalk();
 
 	// fadeOut(_switchRoomEffect2);
 	// _newEffect = _switchRoomEffect;
@@ -169,7 +170,6 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
     if (entryScriptOffs)
     {
-        // runEntryScript();
         runRoomScript(-1, room, entryScriptOffs);
     }
 

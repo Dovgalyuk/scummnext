@@ -7,6 +7,7 @@
 #include "debug.h"
 #include "verbs.h"
 #include "sprites.h"
+#include "string.h"
 
 #define PAL_SPRITES 0x20
 #define PAL_TILES   0x30
@@ -158,7 +159,7 @@ void decodeNESTrTable(void)
 {
     HROOM r = seekResource(&costumes[77]);
     uint8_t size = readWord(r);
-    DEBUG_PRINTF("NES translation table size %u\n", size);
+    //DEBUG_PRINTF("NES translation table size %u\n", size);
     for (uint8_t i = 0 ; i < size - 2 ; ++i)
         translationTable[i + ' '] = readByte(r);
     closeRoom(r);
@@ -257,7 +258,7 @@ static const int v1MMNEScostTables[2][6] = {
 void graphics_loadCostumeSet(uint8_t n)
 {
     HROOM r;
-    DEBUG_PRINTF("Load costume set %u\n", n);
+    //DEBUG_PRINTF("Load costume set %u\n", n);
     r = seekResource(&costumes[v1MMNEScostTables[n][0]]);
     readResource(r, costdesc, sizeof(costdesc));
     closeRoom(r);
@@ -387,13 +388,35 @@ static void clearTalkArea(void)
     }
 }
 
-static void printAtXY(const char *s, uint8_t x, uint8_t y)
+static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y)
 {
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + x * TILE_BYTES + y * LINE_BYTES;
     while (*s)
     {
+        uint8_t c = *s++;
+        if (c == '@')
+            continue;
+        if (c == 1)
+        {
+            // newline
+            if (x != 0)
+            {
+                screen += 2 * TEXT_GAP * TILE_BYTES + (LINE_WIDTH - TEXT_GAP - x) * TILE_BYTES;
+                x = 0;
+            }
+            continue;
+        }
+        if (c == 3)
+        {
+            // next message, should not be passed here
+        }
+        if (c < 0x20 || c >= 0x80)
+        {
+            DEBUG_PRINTF("\nSpecial code %u\n", c);
+            DEBUG_HALT;
+        }
         //DEBUG_PRINTF("char %u pattern %u\n", *s, translationTable[*s]);
-        *screen++ = translationTable[*s++];
+        *screen++ = translationTable[c];
         *screen++ = 0;
         ++x;
         if (x >= LINE_WIDTH - TEXT_GAP)

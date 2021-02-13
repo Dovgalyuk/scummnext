@@ -125,26 +125,25 @@ static void closestPtOnLine(uint8_t sx, uint8_t sy, uint8_t ex, uint8_t ey,
 		*ox = x;
 		*oy = sy;
 	} else {
-        DEBUG_ASSERT(0, "closestPtOnLine");
-		// const int dist = lxdiff * lxdiff + lydiff * lydiff;
-		// int a, b, c;
-		// if (ABS(lxdiff) > ABS(lydiff)) {
-		// 	a = sx * lydiff / lxdiff;
-		// 	b = x * lxdiff / lydiff;
+ 		const int dist = lxdiff * lxdiff + lydiff * lydiff;
+		int a, b, c;
+		if (ABS(lxdiff) > ABS(lydiff)) {
+			a = sx * lydiff / lxdiff;
+			b = x * lxdiff / lydiff;
 
-		// 	c = (a + b - sy + y) * lydiff * lxdiff / dist;
+			c = (a + b - sy + y) * lydiff * lxdiff / dist;
 
-		// 	*ox = c;
-		// 	*oy = c * lydiff / lxdiff - a + sy;
-		// } else {
-		// 	a = sy * lxdiff / lydiff;
-		// 	b = y * lydiff / lxdiff;
+			*ox = c;
+			*oy = c * lydiff / lxdiff - a + sy;
+		} else {
+			a = sy * lxdiff / lydiff;
+			b = y * lydiff / lxdiff;
 
-		// 	c = (a + b - sx + x) * lydiff * lxdiff / dist;
+			c = (a + b - sx + x) * lydiff * lxdiff / dist;
 
-		// 	*ox = c * lxdiff / lydiff - a + sx;
-		// 	*oy = c;
-		// }
+			*ox = c * lxdiff / lydiff - a + sx;
+			*oy = c;
+		}
 	}
 
     if (ABS(lydiff) < ABS(lxdiff))
@@ -241,14 +240,14 @@ uint8_t box_getClosestPtOnBox(uint8_t b, uint8_t x, uint8_t y, uint8_t *outX, ui
     return bestdist;
 }
 
+static uint8_t compareSlope(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t x3, uint8_t y3) {
+	return (y2 - y1) * (x3 - x1) <= (y3 - y1) * (x2 - x1);
+}
+
 uint8_t box_checkXYInBounds(uint8_t b, uint8_t x, uint8_t y)
 {
-    DEBUG_ASSERT(b < MAX_BOXES, "box_checkXYInBounds");
+    DEBUG_ASSERT(b < MAX_BOXES, "box_checkXYInBounds max");
     Box *box = &boxes[b];
-
-    // TODO: support non-rectangular
-    DEBUG_ASSERT(box->ulx == box->llx, "box_checkXYInBounds");
-    DEBUG_ASSERT(box->urx == box->lrx, "box_checkXYInBounds");
 
 	// Quick check: If the x (resp. y) coordinate of the point is
 	// strictly smaller (bigger) than the x (y) coordinates of all
@@ -264,6 +263,31 @@ uint8_t box_checkXYInBounds(uint8_t b, uint8_t x, uint8_t y)
 		return 0;
 
 	if (y > box->uy && y > box->ly)
+		return 0;
+
+    // TODO: support simple line segment
+	if ((box->ulx == box->urx && box->lrx == box->llx) ||
+		(box->ulx == box->llx && box->uy == box->ly && box->urx == box->lrx))
+    {
+        DEBUG_ASSERT(0, "box_checkXYInBounds");
+    }
+
+
+	// Finally, fall back to the classic algorithm to compute containment
+	// in a convex polygon: For each (oriented) side of the polygon
+	// (quadrangle in this case), compute whether p is "left" or "right"
+	// from it.
+
+	if (!compareSlope(box->ulx, box->uy, box->urx, box->uy, x, y))
+		return 0;
+
+	if (!compareSlope(box->urx, box->uy, box->lrx, box->ly, x, y))
+		return 0;
+
+	if (!compareSlope(box->lrx, box->ly, box->llx, box->ly, x, y))
+		return 0;
+
+	if (!compareSlope(box->llx, box->ly, box->ulx, box->uy, x, y))
 		return 0;
 
     return 1;

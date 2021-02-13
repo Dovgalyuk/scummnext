@@ -32,7 +32,7 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
     esx_f_seek(src, 2 * anim, ESX_SEEK_FWD);
     uint8_t begin = readByte(src);
     uint8_t end = readByte(src);
-    DEBUG_PRINTF("Decode animation %u of %u frames from %u\n", anim, end, begin);
+    //DEBUG_PRINTF("Decode animation %u of %u frames from %u\n", anim, end, begin);
     DEBUG_ASSERT(end <= MAX_FRAMES, "decodeNESCostume");
     esx_f_seek(src, begin - 2 * anim - 2, ESX_SEEK_FWD);
 
@@ -49,7 +49,7 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
         // offset is the beginning
         // in scummvm data is decoded in backwards direction, from the end
         uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
-        DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
+        //DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
         esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
 
         // bool flipped = (newDirToOldDir(a->getFacing()) == 1);
@@ -117,7 +117,7 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
                 IO_SPRITE_ATTRIBUTE = 0x40;
             }
 
-            DEBUG_PRINTF("Sprite %d tile=%d x=%d y=%d\n", nextSprite, tile, x, y);
+            //DEBUG_PRINTF("Sprite %d tile=%d x=%d y=%d\n", nextSprite, tile, x, y);
 
             ++nextSprite;
         }

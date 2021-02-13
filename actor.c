@@ -6,12 +6,12 @@
 #include "box.h"
 #include "helper.h"
 #include "object.h"
+#include "script.h"
+#include "string.h"
 
 #define _standFrame    1
 #define _initFrame     2
 #define _talkStopFrame 4
-
-int8_t talkDelay;
 
 Actor actors[ACTOR_COUNT];
 
@@ -215,13 +215,20 @@ void actor_setCostume(uint8_t actor, uint8_t costume)
     //costume_updateAll();
 }
 
-void actor_talk(uint8_t actor, const char *s)
+void actor_stopTalk(void)
+{
+    scummVars[VAR_HAVE_MSG] = 0;
+    talkDelay = 0;
+}
+
+void actor_talk(uint8_t actor, const uint8_t *s)
 {
     // TODO: color
     // TODO: variables
-    //_talkDelay += _msgCount * _defaultTalkDelay;
-    talkDelay = 60;
-    graphics_print(s);
+
+    scummVars[VAR_HAVE_MSG] = 0xff;
+
+    message_print(s);
 }
 
 void actor_setRoom(uint8_t actor, uint8_t room)
@@ -239,6 +246,8 @@ void actor_put(uint8_t actor, uint8_t x, uint8_t y)
     a->moving = 0;
     a->x = x;
     a->y = y;
+    // if (_visible && _vm->_currentRoom != newRoom && _vm->getTalkingActor() == _number) {
+    actor_stopTalk();
     if (actor_isInCurrentRoom(actor))
     {
         uint8_t box = boxes_adjustXY(&x, &y);

@@ -9,6 +9,7 @@
 #include "cursor.h"
 #include "object.h"
 #include "sprites.h"
+#include "string.h"
 
 const int _numRooms = 55;
 
@@ -78,6 +79,7 @@ int main()
         actors_animate();
         actors_walk();
         camera_move();
+        messages_update();
         updateScummVars();
         processScript();
         checkExecVerbs();
