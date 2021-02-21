@@ -459,18 +459,9 @@ void graphics_updateScreen(void)
     if (roomWidth < SCREEN_WIDTH)
     {
         gap += (SCREEN_WIDTH - roomWidth) / 2;
-        offs = 0;
         width = roomWidth;
     }
-    else
-    {
-        uint8_t cam = cameraX;
-        if (cam < SCREEN_WIDTH / 2)
-            cam = SCREEN_WIDTH / 2;
-        else if (cam > roomWidth - SCREEN_WIDTH / 2)
-            cam = roomWidth - SCREEN_WIDTH / 2;
-        offs = cam - SCREEN_WIDTH / 2;
-    }
+    offs = camera_getVirtScreenX();
 
     // TODO: clear the border
 

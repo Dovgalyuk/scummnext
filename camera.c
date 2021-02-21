@@ -66,7 +66,7 @@ void camera_followActor(uint8_t actor)
 	// 	if (_actors[i]->isInCurrentRoom())
 	// 		_actors[i]->_needRedraw = true;
 	// }
-	// runInventoryScript(0);
+	runInventoryScript(0);
 }
 
 void camera_move(void)
@@ -82,4 +82,18 @@ void camera_move(void)
         --cameraX;
 
     scummVars[VAR_CAMERA_POS_X] = cameraX;
+}
+
+uint8_t camera_getVirtScreenX(void)
+{
+    if (roomWidth < SCREEN_WIDTH)
+        return 0;
+
+    uint8_t cam = cameraX;
+    if (cam < SCREEN_WIDTH / 2)
+        cam = SCREEN_WIDTH / 2;
+    else if (cam > roomWidth - SCREEN_WIDTH / 2)
+        cam = roomWidth - SCREEN_WIDTH / 2;
+
+    return cam - SCREEN_WIDTH / 2;
 }

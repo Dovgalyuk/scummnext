@@ -116,7 +116,7 @@ void setupRoomObjects(HROOM r)
 Object *object_find(uint16_t x, uint16_t y)
 {
     // convert y to tiles, because objects have tile coordinates
-    y /= 8 / V12_Y_MULTIPLIER;
+    y = y / (8 / V12_Y_MULTIPLIER);
 	// const int mask = (_game.version <= 2) ? kObjectState_08 : 0xF;
     Object *obj = objects;
     Object *end = objects + _numLocalObjects;
@@ -165,7 +165,7 @@ uint8_t object_getOwner(uint16_t id)
 
 void object_setOwner(uint16_t id, uint8_t owner)
 {
-    DEBUG_PRINTF("Get owner %u for %u\n", owner, id);
+    DEBUG_PRINTF("Set owner %u for %u\n", owner, id);
     objectOwnerTable[id] = owner;
 }
 

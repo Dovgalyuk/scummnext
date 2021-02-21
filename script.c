@@ -75,7 +75,7 @@ static void switchScriptPage(uint8_t s)
     ZXN_WRITE_MMU1(FIRST_BANK + s);
 }
 
-static void loadScriptBytes(uint8_t s)
+static void loadScriptBytes(void)
 {
     HROOM r = openRoom(script_room);
     esx_f_seek(r, script_roomoffs, ESX_SEEK_SET);
@@ -238,7 +238,7 @@ static void pushScript(uint16_t id, uint8_t room, uint16_t roomoffs, uint16_t of
     script_room = room;
     script_roomoffs = roomoffs;
     script_offset = offset;
-    loadScriptBytes(s);
+    loadScriptBytes();
     switchScriptPage(curScript);
 }
 
@@ -940,7 +940,7 @@ static void setUserState(uint8_t state)
 
     // // Draw all verbs and inventory
     // redrawVerbs();
-    // runInventoryScript(1);
+    runInventoryScript(1);
 }
 
 static void op_cursorCommand(void)
@@ -1698,15 +1698,18 @@ void updateScummVars(void)
     // We use shifts below instead of dividing by V12_X_MULTIPLIER resp.
     // V12_Y_MULTIPLIER to handle negative coordinates correctly.
     // This fixes e.g. bugs #1328131 and #1537595.
-    scummVars[VAR_VIRT_MOUSE_X] = cursorX >> V12_X_SHIFT;
+    uint8_t cam = camera_getVirtScreenX();
+    scummVars[VAR_VIRT_MOUSE_X] = cam + (cursorX >> V12_X_SHIFT);
     scummVars[VAR_VIRT_MOUSE_Y] = cursorY >> V12_Y_SHIFT;
 
     // Adjust mouse coordinates as narrow rooms in NES are centered
     // if (_game.platform == Common::kPlatformNES && _NESStartStrip > 0) {
-    scummVars[VAR_VIRT_MOUSE_X] -= 2;
-    if (scummVars[VAR_VIRT_MOUSE_X] < 0)
-        scummVars[VAR_VIRT_MOUSE_X] = 0;
-    // }
+    if (roomWidth < SCREEN_WIDTH)
+    {
+        scummVars[VAR_VIRT_MOUSE_X] -= 2;
+        if (scummVars[VAR_VIRT_MOUSE_X] < 0)
+            scummVars[VAR_VIRT_MOUSE_X] = 0;
+    }
 
 	// // 'B' is used to skip cutscenes in the NES version of Maniac Mansion
 	// } else if (_game.id == GID_MANIAC &&_game.platform == Common::kPlatformNES) {
@@ -1862,4 +1865,17 @@ void checkAndRunSentenceScript(void)
     //     scummVars[VAR_ACTIVE_OBJECT2], scummVars[VAR_VERB_ALLOWED]);
 
     runScript(2);
+}
+
+void runInventoryScript(uint16_t i)
+{
+    //void ScummEngine_v2::redrawV2Inventory()
+
+    // not needed
+    // if (scummVars[VAR_INVENTORY_SCRIPT]) {
+    //     // int args[NUM_SCRIPT_LOCAL];
+    //     // memset(args, 0, sizeof(args));
+    //     // args[0] = i;
+    //     runScript(scummVars[VAR_INVENTORY_SCRIPT]/*, 0, 0, args*/);
+    // }
 }
