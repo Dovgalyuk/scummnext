@@ -27,5 +27,6 @@ extern VerbSlot verbs[];
 
 void verb_kill(uint8_t slot);
 uint8_t verb_getSlot(uint8_t verb, uint8_t mode);
+uint8_t verb_findAtPos(uint8_t x, uint8_t y);
 
 #endif

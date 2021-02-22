@@ -53,6 +53,6 @@ void graphics_print(const char *s);
 void graphics_drawObject(Object *obj);
 void graphics_drawVerb(VerbSlot *v);
 
-uint8_t graphics_findVirtScreen(uint16_t y);
+uint8_t graphics_findVirtScreen(uint8_t y);
 
 #endif

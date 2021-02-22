@@ -56,7 +56,7 @@ void cursor_animate(void)
     // scummVars[VAR_VIRT_MOUSE_Y] = cursorY >> V12_Y_SHIFT;
 
     uint16_t x = cursorX + (LINE_GAP * 8);
-    uint16_t y = cursorY + (SCREEN_TOP * 8);
+    uint16_t y = cursorY;// + (SCREEN_TOP * 8);
     IO_SPRITE_SLOT = SPRITE_CURSOR;
     IO_SPRITE_ATTRIBUTE = x; // x
     IO_SPRITE_ATTRIBUTE = y; // y

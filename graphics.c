@@ -135,12 +135,12 @@ void initGraphics(void)
 
     // // DEBUG_PUTS("Setting tilemap\n");
 
-    uint8_t *p = (uint8_t*)TILEMAP_BASE + LINE_BYTES * 26;
-    for (i = 0 ; i < 256 ; ++i)
-    {
-        *p++ = i;
-        *p++ = 0;
-    }
+    // uint8_t *p = (uint8_t*)TILEMAP_BASE + LINE_BYTES * 26;
+    // for (i = 0 ; i < 256 ; ++i)
+    // {
+    //     *p++ = i;
+    //     *p++ = 0;
+    // }
 
     // reset all sprite attributes
     for (i = 0 ; i < 128 ; ++i)
@@ -388,7 +388,7 @@ static void clearTalkArea(void)
     }
 }
 
-static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y)
+static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap)
 {
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + x * TILE_BYTES + y * LINE_BYTES;
     while (*s)
@@ -401,7 +401,7 @@ static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y)
             // newline
             if (x != 0)
             {
-                screen += 2 * TEXT_GAP * TILE_BYTES + (LINE_WIDTH - TEXT_GAP - x) * TILE_BYTES;
+                screen += 2 * gap * TILE_BYTES + (LINE_WIDTH - gap - x) * TILE_BYTES;
                 x = 0;
             }
             continue;
@@ -419,10 +419,10 @@ static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y)
         *screen++ = translationTable[c];
         *screen++ = 0;
         ++x;
-        if (x >= LINE_WIDTH - TEXT_GAP)
+        if (x >= LINE_WIDTH - gap)
         {
             x = 0;
-            screen += 2 * TEXT_GAP * TILE_BYTES;
+            screen += 2 * gap * TILE_BYTES;
         }
     }
 }
@@ -430,12 +430,12 @@ static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y)
 void graphics_print(const char *s)
 {
     clearTalkArea();
-    printAtXY(s, TEXT_GAP, 0);
+    printAtXY(s, TEXT_GAP, 0, TEXT_GAP);
 }
 
 void graphics_drawVerb(VerbSlot *v)
 {
-    printAtXY(v->name, TEXT_GAP - 1 + v->x, v->y);
+    printAtXY(v->name, LINE_GAP + v->x, v->y, LINE_GAP);
 }
 
 void graphics_updateScreen(void)
@@ -528,12 +528,11 @@ void graphics_drawObject(Object *obj)
     decodeNESObject(obj);
 }
 
-uint8_t graphics_findVirtScreen(uint16_t y)
+uint8_t graphics_findVirtScreen(uint8_t y)
 {
-    uint8_t yy = y / 8;
-    if (yy <= SCREEN_TOP)
+    if (y <= SCREEN_TOP)
         return kTextVirtScreen;
-    if (yy <= SCREEN_TOP + SCREEN_HEIGHT)
+    if (y <= SCREEN_TOP + SCREEN_HEIGHT)
         return kMainVirtScreen;
     return kVerbVirtScreen;
 }

@@ -657,23 +657,17 @@ static void op_verbOps(void)
 		break;
 
 	default: {	// New Verb
-		int x = fetchScriptByte();// * 8;
-		int y = fetchScriptByte();// * 8;
+		uint8_t x = fetchScriptByte();// * 8;
+		uint8_t y = fetchScriptByte();// * 8;
 		slot = getVarOrDirectByte(PARAM_1) + 1;
-		int prep = fetchScriptByte(); // Only used in V1?
+		uint8_t prep = fetchScriptByte(); // Only used in V1?
         x += 1;//8;
 
-		// VerbSlot *vs;
-		// assert(0 < slot && slot < _numVerbs);
-
-		// vs = &_verbs[slot];
-		// vs->verbid = verb;
         // vs->color = 1;
         // vs->hicolor = 1;
         // vs->dimcolor = 1;
 		// vs->type = kTextVerbType;
 		// vs->charset_nr = _string[0]._default.charset;
-		// vs->curmode = 1;
 		// vs->saveid = 0;
 		// vs->key = 0;
 		// vs->center = 0;
@@ -683,10 +677,12 @@ static void op_verbOps(void)
 		// vs->curRect.left = x;
 		// vs->curRect.top = y;
         DEBUG_ASSERT(slot < _numVerbs, "op_verbOps");
+        verb_kill(slot);
         VerbSlot *vs = &verbs[slot];
         vs->verbid = verb;
         vs->x = x;
         vs->y = y;
+		vs->curmode = 1;
 
         // static const char keyboard[] = {
         //         'q','w','e','r',
@@ -702,7 +698,7 @@ static void op_verbOps(void)
         while (*s++ = fetchScriptByte())
             ;
         DEBUG_ASSERT(s - vs->name < VERB_NAME_SIZE, "op_verbOps name");
-        DEBUG_PRINTF("New verb '%s' at %d %d\n", vs->name, vs->x, vs->y);
+        // DEBUG_PRINTF("New verb '%s' at %d %d\n", vs->name, vs->x, vs->y);
         }
 		break;
 	}
@@ -1326,6 +1322,98 @@ static void op_ifState08(void)
     ifStateCommon(kObjectState_08);
 }
 
+typedef void (*OpcodeFunc)(void);
+
+static OpcodeFunc opcodes[0x100] = {
+    [0x00] = op_stopObjectCode,
+    [0x01] = op_putActor,
+    [0x02] = op_startMusic,
+    [0x03] = op_getActorRoom,
+    [0x05] = op_drawObject,
+    [0x07] = op_setState08,
+    [0x08] = op_isNotEqual,
+    [0x0c] = op_resourceRoutines,
+    [0x0d] = op_walkActorToActor,
+    [0x0e] = op_putActorAtObject,
+    [0x10] = op_getObjectOwner,
+    [0x11] = op_animateActor,
+    [0x12] = op_panCameraTo,
+    [0x13] = op_actorOps,
+    [0x14] = op_print,
+    [0x16] = op_getRandomNr,
+    [0x18] = op_jumpRelative,
+    [0x19] = op_doSentence,
+    [0x1a] = op_move,
+    [0x1b] = op_setBitVar,
+    [0x1c] = op_startSound,
+    [0x1e] = op_walkActorTo,
+    [0x20] = op_stopMusic,
+    [0x24] = op_loadRoomWithEgo,
+    [0x26] = op_setVarRange,
+    [0x28] = op_equalZero,
+    [0x2b] = op_delayVariable,
+    [0x2c] = op_assignVarByte,
+    [0x2d] = op_putActorInRoom,
+    [0x2e] = op_delay,
+    [0x32] = op_setCameraAt,
+    [0x38] = op_isLessEqual,
+    [0x3b] = op_waitForActor,
+    [0x3c] = op_stopSound,
+    [0x40] = op_cutscene,
+    [0x42] = op_startScript,
+    [0x43] = op_getActorX,
+    [0x44] = op_isLess,
+    [0x46] = op_increment,
+    [0x47] = op_clearState08,
+    [0x48] = op_isEqual,
+    [0x4f] = op_ifState08,
+    [0x50] = op_pickupObject,
+    [0x52] = op_actorFollowCamera,
+    [0x53] = op_actorOps,
+    [0x58] = op_beginOverride,
+    [0x5a] = op_add,
+    [0x5b] = op_setBitVar,
+    [0x60] = op_cursorCommand,
+    [0x62] = op_stopScript,
+    [0x68] = op_isScriptRunning,
+    [0x69] = op_setOwnerOf,
+    [0x70] = op_lights,
+    [0x72] = op_loadRoom,
+    [0x78] = op_isGreater,
+    [0x7a] = op_verbOps,
+    [0x7c] = op_isSoundRunning,
+    [0x80] = op_breakHere,
+    [0x81] = op_putActor,
+    [0x84] = op_isGreaterEqual,
+    [0x85] = op_drawObject,
+    [0x88] = op_isNotEqual,
+    [0x90] = op_getObjectOwner,
+    [0x91] = op_getObjectOwner,
+    [0x94] = op_print,
+    [0x9a] = op_move,
+    [0xa0] = op_stopObjectCode,
+    [0xa8] = op_isNotEqualZero,
+    [0xab] = op_switchCostumeSet,
+    [0xac] = op_drawSentence,
+    [0xad] = op_putActorInRoom,
+    [0xae] = op_waitForMessage,
+    [0xb1] = op_getBitVar,
+    [0xbb] = op_waitForActor,
+    [0xc0] = op_endCutscene,
+    [0xc8] = op_isEqual,
+    [0xce] = op_putActorAtObject,
+    [0xcf] = op_ifState08,
+    [0xd8] = op_printEgo,
+    [0xd9] = op_doSentence,
+    [0xf4] = op_getDist,
+    [0xf5] = op_findObject,
+    [0xf6] = op_walkActorToObject,
+    [0xf9] = op_doSentence,
+    [0xfa] = op_verbOps,
+    [0xfe] = op_walkActorTo,
+    [0xff] = op_ifState01,
+};
+
 void executeScript(void)
 {
     if (script_delay)
@@ -1342,274 +1430,281 @@ void executeScript(void)
     {
         //DEBUG_PRINTF("EXEC %u 0x%x\n", stack[curScript].id, stack[curScript].offset - 4);
         opcode = fetchScriptByte();
-        //DEBUG_PRINTF("--- opcode 0x%x\n", opcode);
-        switch (opcode)
+        OpcodeFunc f = opcodes[opcode];
+        if (!f)
         {
-        case 0x00:
-            op_stopObjectCode();
-            break;
-        case 0x01:
-            op_putActor();
-            break;
-        case 0x02:
-            op_startMusic();
-            break;
-        case 0x03:
-            op_getActorRoom();
-            break;
-        case 0x05:
-            op_drawObject();
-            break;
-        case 0x07:
-            op_setState08();
-            break;
-        case 0x08:
-            op_isNotEqual();
-            break;
-        case 0x0c:
-            op_resourceRoutines();
-            break;
-        case 0x0d:
-            op_walkActorToActor();
-            break;
-        case 0x0e:
-            op_putActorAtObject();
-            break;
-        case 0x10:
-            op_getObjectOwner();
-            break;
-        case 0x11:
-            op_animateActor();
-            break;
-        case 0x12:
-            op_panCameraTo();
-            break;
-        case 0x13:
-        case 0x53:
-            op_actorOps();
-            break;
-        case 0x14:
-            op_print();
-            break;
-        case 0x16:
-            op_getRandomNr();
-            break;
-        case 0x18:
-            op_jumpRelative();
-            break;
-        case 0x19:
-            op_doSentence();
-            break;
-        case 0x1a:
-            op_move();
-            break;
-        case 0x1b:
-        case 0x5b:
-            op_setBitVar();
-            break;
-        case 0x1c:
-            op_startSound();
-            break;
-        case 0x1e:
-            op_walkActorTo();
-            break;
-        case 0x20:
-            op_stopMusic();
-            break;
-        case 0x24:
-            op_loadRoomWithEgo();
-            break;
-        case 0x26:
-            op_setVarRange();
-            break;
-        case 0x28:
-            op_equalZero();
-            break;
-        case 0x2b:
-            op_delayVariable();
-            break;
-        case 0x2c:
-            op_assignVarByte();
-            break;
-        case 0x2d:
-            op_putActorInRoom();
-            break;
-        case 0x2e:
-            op_delay();
-            break;
-        case 0x32:
-            op_setCameraAt();
-            break;
-        case 0x38:
-            op_isLessEqual();
-            break;
-        case 0x3b:
-            op_waitForActor();
-            break;
-        case 0x3c:
-            op_stopSound();
-            break;
-        case 0x40:
-            op_cutscene();
-            break;
-        case 0x42:
-            op_startScript();
-            break;
-        case 0x43:
-            op_getActorX();
-            break;
-        case 0x44:
-            op_isLess();
-            break;
-        case 0x46:
-            op_increment();
-            break;
-        case 0x47:
-            op_clearState08();
-            break;
-        case 0x48:
-            op_isEqual();
-            break;
-        case 0x4f:
-            op_ifState08();
-            break;
-        case 0x50:
-            op_pickupObject();
-            break;
-        case 0x52:
-            op_actorFollowCamera();
-            break;
-        case 0x58:
-            op_beginOverride();
-            break;
-        case 0x5a:
-            op_add();
-            break;
-        case 0x60:
-            op_cursorCommand();
-            break;
-        case 0x62:
-            op_stopScript();
-            break;
-        // case 0x64:
-        //     op_loadRoomWithEgo();
-        //     break;
-        case 0x68:
-            op_isScriptRunning();
-            break;
-        case 0x69:
-            op_setOwnerOf();
-            break;
-        case 0x70:
-            op_lights();
-            break;
-        case 0x72:
-            op_loadRoom();
-            break;
-        case 0x78:
-            op_isGreater();
-            break;
-        case 0x7a:
-            op_verbOps();
-            break;
-        case 0x7c:
-            op_isSoundRunning();
-            break;
-        case 0x80:
-            op_breakHere();
-            break;
-        case 0x81:
-            op_putActor();
-            break;
-        case 0x84:
-            op_isGreaterEqual();
-            break;
-        case 0x85:
-            op_drawObject();
-            break;
-        case 0x88:
-            op_isNotEqual();
-            break;
-        case 0x90:
-            op_getObjectOwner();
-            break;
-        case 0x91:
-            op_getObjectOwner();
-            break;
-        case 0x94:
-            op_print();
-            break;
-        case 0x9a:
-            op_move();
-            break;
-        case 0xa0:
-            op_stopObjectCode();
-            break;
-        case 0xa8:
-            op_isNotEqualZero();
-            break;
-        case 0xab:
-            op_switchCostumeSet();
-            break;
-        case 0xac:
-            op_drawSentence();
-            break;
-        case 0xad:
-            op_putActorInRoom();
-            break;
-        case 0xae:
-            op_waitForMessage();
-            break;
-        case 0xb1:
-            op_getBitVar();
-            break;
-        case 0xbb:
-            op_waitForActor();
-            break;
-        case 0xc0:
-            op_endCutscene();
-            break;
-        case 0xc8:
-            op_isEqual();
-            break;
-        case 0xce:
-            op_putActorAtObject();
-            break;
-        case 0xcf:
-            op_ifState08();
-            break;
-        case 0xd8:
-            op_printEgo();
-            break;
-        case 0xd9:
-            op_doSentence();
-            break;
-        case 0xf4:
-            op_getDist();
-            break;
-        case 0xf5:
-            op_findObject();
-            break;
-        case 0xf6:
-            op_walkActorToObject();
-            break;
-        case 0xf9:
-            op_doSentence();
-            break;
-        case 0xfa:
-            op_verbOps();
-            break;
-        case 0xfe:
-            op_walkActorTo();
-            break;
-        case 0xff:
-            op_ifState01();
-            break;
-        default:
             DEBUG_PRINTF("Unknown opcode %x\n", opcode);
             DEBUG_HALT;
-            break;
         }
+        f();
+        //DEBUG_PRINTF("--- opcode 0x%x\n", opcode);
+        // switch (opcode)
+        // {
+        // case 0x00:
+        //     op_stopObjectCode();
+        //     break;
+        // case 0x01:
+        //     op_putActor();
+        //     break;
+        // case 0x02:
+        //     op_startMusic();
+        //     break;
+        // case 0x03:
+        //     op_getActorRoom();
+        //     break;
+        // case 0x05:
+        //     op_drawObject();
+        //     break;
+        // case 0x07:
+        //     op_setState08();
+        //     break;
+        // case 0x08:
+        //     op_isNotEqual();
+        //     break;
+        // case 0x0c:
+        //     op_resourceRoutines();
+        //     break;
+        // case 0x0d:
+        //     op_walkActorToActor();
+        //     break;
+        // case 0x0e:
+        //     op_putActorAtObject();
+        //     break;
+        // case 0x10:
+        //     op_getObjectOwner();
+        //     break;
+        // case 0x11:
+        //     op_animateActor();
+        //     break;
+        // case 0x12:
+        //     op_panCameraTo();
+        //     break;
+        // case 0x13:
+        // case 0x53:
+        //     op_actorOps();
+        //     break;
+        // case 0x14:
+        //     op_print();
+        //     break;
+        // case 0x16:
+        //     op_getRandomNr();
+        //     break;
+        // case 0x18:
+        //     op_jumpRelative();
+        //     break;
+        // case 0x19:
+        //     op_doSentence();
+        //     break;
+        // case 0x1a:
+        //     op_move();
+        //     break;
+        // case 0x1b:
+        // case 0x5b:
+        //     op_setBitVar();
+        //     break;
+        // case 0x1c:
+        //     op_startSound();
+        //     break;
+        // case 0x1e:
+        //     op_walkActorTo();
+        //     break;
+        // case 0x20:
+        //     op_stopMusic();
+        //     break;
+        // case 0x24:
+        //     op_loadRoomWithEgo();
+        //     break;
+        // case 0x26:
+        //     op_setVarRange();
+        //     break;
+        // case 0x28:
+        //     op_equalZero();
+        //     break;
+        // case 0x2b:
+        //     op_delayVariable();
+        //     break;
+        // case 0x2c:
+        //     op_assignVarByte();
+        //     break;
+        // case 0x2d:
+        //     op_putActorInRoom();
+        //     break;
+        // case 0x2e:
+        //     op_delay();
+        //     break;
+        // case 0x32:
+        //     op_setCameraAt();
+        //     break;
+        // case 0x38:
+        //     op_isLessEqual();
+        //     break;
+        // case 0x3b:
+        //     op_waitForActor();
+        //     break;
+        // case 0x3c:
+        //     op_stopSound();
+        //     break;
+        // case 0x40:
+        //     op_cutscene();
+        //     break;
+        // case 0x42:
+        //     op_startScript();
+        //     break;
+        // case 0x43:
+        //     op_getActorX();
+        //     break;
+        // case 0x44:
+        //     op_isLess();
+        //     break;
+        // case 0x46:
+        //     op_increment();
+        //     break;
+        // case 0x47:
+        //     op_clearState08();
+        //     break;
+        // case 0x48:
+        //     op_isEqual();
+        //     break;
+        // case 0x4f:
+        //     op_ifState08();
+        //     break;
+        // case 0x50:
+        //     op_pickupObject();
+        //     break;
+        // case 0x52:
+        //     op_actorFollowCamera();
+        //     break;
+        // case 0x58:
+        //     op_beginOverride();
+        //     break;
+        // case 0x5a:
+        //     op_add();
+        //     break;
+        // case 0x60:
+        //     op_cursorCommand();
+        //     break;
+        // case 0x62:
+        //     op_stopScript();
+        //     break;
+        // // case 0x64:
+        // //     op_loadRoomWithEgo();
+        // //     break;
+        // case 0x68:
+        //     op_isScriptRunning();
+        //     break;
+        // case 0x69:
+        //     op_setOwnerOf();
+        //     break;
+        // case 0x70:
+        //     op_lights();
+        //     break;
+        // case 0x72:
+        //     op_loadRoom();
+        //     break;
+        // case 0x78:
+        //     op_isGreater();
+        //     break;
+        // case 0x7a:
+        //     op_verbOps();
+        //     break;
+        // case 0x7c:
+        //     op_isSoundRunning();
+        //     break;
+        // case 0x80:
+        //     op_breakHere();
+        //     break;
+        // case 0x81:
+        //     op_putActor();
+        //     break;
+        // case 0x84:
+        //     op_isGreaterEqual();
+        //     break;
+        // case 0x85:
+        //     op_drawObject();
+        //     break;
+        // case 0x88:
+        //     op_isNotEqual();
+        //     break;
+        // case 0x90:
+        //     op_getObjectOwner();
+        //     break;
+        // case 0x91:
+        //     op_getObjectOwner();
+        //     break;
+        // case 0x94:
+        //     op_print();
+        //     break;
+        // case 0x9a:
+        //     op_move();
+        //     break;
+        // case 0xa0:
+        //     op_stopObjectCode();
+        //     break;
+        // case 0xa8:
+        //     op_isNotEqualZero();
+        //     break;
+        // case 0xab:
+        //     op_switchCostumeSet();
+        //     break;
+        // case 0xac:
+        //     op_drawSentence();
+        //     break;
+        // case 0xad:
+        //     op_putActorInRoom();
+        //     break;
+        // case 0xae:
+        //     op_waitForMessage();
+        //     break;
+        // case 0xb1:
+        //     op_getBitVar();
+        //     break;
+        // case 0xbb:
+        //     op_waitForActor();
+        //     break;
+        // case 0xc0:
+        //     op_endCutscene();
+        //     break;
+        // case 0xc8:
+        //     op_isEqual();
+        //     break;
+        // case 0xce:
+        //     op_putActorAtObject();
+        //     break;
+        // case 0xcf:
+        //     op_ifState08();
+        //     break;
+        // case 0xd8:
+        //     op_printEgo();
+        //     break;
+        // case 0xd9:
+        //     op_doSentence();
+        //     break;
+        // case 0xf4:
+        //     op_getDist();
+        //     break;
+        // case 0xf5:
+        //     op_findObject();
+        //     break;
+        // case 0xf6:
+        //     op_walkActorToObject();
+        //     break;
+        // case 0xf9:
+        //     op_doSentence();
+        //     break;
+        // case 0xfa:
+        //     op_verbOps();
+        //     break;
+        // case 0xfe:
+        //     op_walkActorTo();
+        //     break;
+        // case 0xff:
+        //     op_ifState01();
+        //     break;
+        // default:
+        //     DEBUG_PRINTF("Unknown opcode %x\n", opcode);
+        //     DEBUG_HALT;
+        //     break;
+        // }
     }
 }
 
@@ -1700,7 +1795,10 @@ void updateScummVars(void)
     // This fixes e.g. bugs #1328131 and #1537595.
     uint8_t cam = camera_getVirtScreenX();
     scummVars[VAR_VIRT_MOUSE_X] = cam + (cursorX >> V12_X_SHIFT);
-    scummVars[VAR_VIRT_MOUSE_Y] = cursorY >> V12_Y_SHIFT;
+    int16_t y = cursorY - SCREEN_TOP * 8;
+    if (y < 0)
+        y = 0;
+    scummVars[VAR_VIRT_MOUSE_Y] = y >> V12_Y_SHIFT;
 
     // Adjust mouse coordinates as narrow rooms in NES are centered
     // if (_game.platform == Common::kPlatformNES && _NESStartStrip > 0) {
@@ -1802,8 +1900,10 @@ void checkExecVerbs(void)
 		// Generic keyboard input
 		//runInputScript(kKeyClickArea, _mouseAndKeyboardStat, 1);
 	} else if (state & MBS_MOUSE_MASK) {
-		uint8_t zone = graphics_findVirtScreen(cursorY);
-		const uint8_t code = state & MBS_LEFT_CLICK ? 1 : 2;
+        DEBUG_PRINTF("Clicked at %d %d\n", cursorX, cursorY);
+        uint8_t y = cursorY / 8;
+		uint8_t zone = graphics_findVirtScreen(y);
+		//const uint8_t code = state & MBS_LEFT_CLICK ? 1 : 2;
 		// const int inventoryArea = (_game.platform == Common::kPlatformNES) ? 48: 32;
 
 		// This could be kUnkVirtScreen.
@@ -1811,27 +1911,30 @@ void checkExecVerbs(void)
 		// if (!zone)
 		// 	return;
 
+        uint8_t x = cursorX / 8;
+        DEBUG_PRINTF("Clicked at %d %d %d\n", x, y, zone);
 		if (zone == kVerbVirtScreen/* && _mouse.y <= zone->topline + 8*/)
         {
 		// 	// Click into V2 sentence line
 		// 	runInputScript(kSentenceClickArea, 0, 0);
-		} else if (zone == kVerbVirtScreen && cursorY > SCREEN_TOP + SCREEN_HEIGHT + 6)
+            uint8_t over = verb_findAtPos(x, y);
+            if (over != 0) {
+                DEBUG_PRINTF("Clicked verb %s\n", verbs[over].name);
+				// Verb was clicked
+				runInputScript(kVerbClickArea, verbs[over].verbid);
+            }
+            if (y > SCREEN_TOP + SCREEN_HEIGHT + 6)
+            {
+            // 	// Click into V2 inventory
+            // 	int object = checkV2Inventory(_mouse.x, _mouse.y);
+            // 	if (object > 0)
+            // 		runInputScript(kInventoryClickArea, object, 0);
+            }
+        }
+        else if (zone == kMainVirtScreen)
         {
-		// 	// Click into V2 inventory
-		// 	int object = checkV2Inventory(_mouse.x, _mouse.y);
-		// 	if (object > 0)
-		// 		runInputScript(kInventoryClickArea, object, 0);
-		}
-        else
-        {
-		// 	over = findVerbAtPos(_mouse.x, _mouse.y);
-			//if (over != 0) {
-		// 		// Verb was clicked
-		// 		runInputScript(kVerbClickArea, _verbs[over].verbid, code);
-			//} else {
-				// Scene was clicked
-				runInputScript((zone == kMainVirtScreen) ? kSceneClickArea : kVerbClickArea, 0);
-			//}
+            // Scene was clicked
+            runInputScript((zone == kMainVirtScreen) ? kSceneClickArea : kVerbClickArea, 0);
 		}
 	}
 }
