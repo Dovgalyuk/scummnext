@@ -74,6 +74,11 @@ void seekToOffset(HROOM r, uint16_t offs)
     esx_f_seek(r, offs, ESX_SEEK_SET);
 }
 
+void seekFwd(HROOM r, uint16_t offs)
+{
+    esx_f_seek(r, offs, ESX_SEEK_FWD);
+}
+
 uint8_t readString(HROOM r, char *s)
 {
     char c;

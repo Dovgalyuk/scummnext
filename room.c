@@ -48,14 +48,14 @@ static void setupRoomSubBlocks(void)
 
     DEBUG_PRINTF("Open room %u width %u objects %u boxes %u\n", currentRoom, roomWidth, numObj, numBoxes);
 
-    int i;
-    for (i = 0 ; i < numBoxes ; ++i)
-    {
-        DEBUG_PRINTF("Box %d uy=%d ly=%d ulx=%d urx=%d llx=%d lrx=%d mask=%x flags=%x\n",
-            i, boxes[i].uy, boxes[i].ly, boxes[i].ulx, boxes[i].urx,
-            boxes[i].llx, boxes[i].lrx, boxes[i].mask, boxes[i].flags
-        );
-    }
+    // int i;
+    // for (i = 0 ; i < numBoxes ; ++i)
+    // {
+    //     DEBUG_PRINTF("Box %d uy=%d ly=%d ulx=%d urx=%d llx=%d lrx=%d mask=%x flags=%x\n",
+    //         i, boxes[i].uy, boxes[i].ly, boxes[i].ulx, boxes[i].urx,
+    //         boxes[i].llx, boxes[i].lrx, boxes[i].mask, boxes[i].flags
+    //     );
+    // }
     // int j;
     // uint8_t *ptr = boxesMatrix;
     // for (i = 0 ; i < numBoxes + 1 ; ++i)
@@ -126,6 +126,9 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
         runRoomScript(-1, currentRoom, exitScriptOffs);
     }
 
+    // clear before changing the room id
+	objects_clear();
+
 	currentRoom = room;
 
     // _roomResource = room;
@@ -134,8 +137,6 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
 	// if (room != 0)
 	// 	ensureResourceLoaded(rtRoom, room);
-
-	objects_clear();
 
 	if (currentRoom == 0)
     {

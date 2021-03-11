@@ -76,16 +76,20 @@ const uint8_t v1MMNESLookup[25] = {
 	0x17, 0x00, 0x01, 0x05, 0x16
 };
 
+__sfr __at 0xfe IO_FE;
+
 void initGraphics(void)
 {
     int i;
 
+    // black border
+    IO_FE = 0;
     // disable layer2
     //ZXN_WRITE_REG(0x69, 0x00);
     // enable tilemap with attributes
     ZXN_WRITE_REG(0x6B, 0x81);
     ZXN_WRITE_REG(0x6C, 0);
-    // transparency index
+    // tilemap transparency index
     //ZXN_WRITE_REG(0x4C, 0);
     // sprite transparency index
     ZXN_WRITE_REG(0x4B, 0);
@@ -100,8 +104,6 @@ void initGraphics(void)
 
     // // switch on ULANext
     // ZXN_WRITE_REG(0x43 = 1;
-    // // disable ULA output
-    // ZXN_WRITE_REG(0x68 = 0x80;
     
     // enable sprites and sprites over border
     ZXN_WRITE_REG(0x15, 0x23);
@@ -139,7 +141,7 @@ void initGraphics(void)
     // for (i = 0 ; i < 256 ; ++i)
     // {
     //     *p++ = i;
-    //     *p++ = 0;
+    //     *p++ = 0;//i << 4;
     // }
 
     // reset all sprite attributes
@@ -183,30 +185,27 @@ static void updatePalette(HROOM r, uint8_t id)
         c = c * 2;
         // color(0-3) + palette offset(0-3)
         if (id == PAL_SPRITES)
+        {
             ZXN_WRITE_REG(0x40, i);
+        }
         else
+        {
             ZXN_WRITE_REG(0x40, (i & 3) | ((i & 0xc) << 2));
+        }
         ZXN_WRITE_REG(0x44, tableNESPalette[c]);
         ZXN_WRITE_REG(0x44, tableNESPalette[c + 1]);
     }
 }
 
-void decodeNESGfx(HROOM r)
+void decodeRoomBackground(HROOM r)
 {
-    uint8_t i, j;
-    uint16_t n;
-    // uint16_t width;
-    //esx_f_seek(r, 0x4, ESX_SEEK_SET);
-    // width = readWord(r);
     esx_f_seek(r, 0xa, ESX_SEEK_SET);
     uint16_t gdata = readWord(r);
-    esx_f_seek(r, gdata, ESX_SEEK_SET);
-    uint8_t tileset = readByte(r);
-    //DEBUG_PRINTF("decoding gdata %u tileset %u\n", gdata, tileset);
-    decodeTiles(tileset);
-    // decode palette
-    updatePalette(r, PAL_TILES);
-    // decode name table
+    // 17 = tileset_id + palette
+    esx_f_seek(r, gdata + 17, ESX_SEEK_SET);
+
+    uint8_t i, j;
+    uint16_t n;
     uint8_t data = readByte(r);
     for (i = 0 ; i < 16 ; ++i)
     {
@@ -249,10 +248,27 @@ void decodeNESGfx(HROOM r)
     // decode masktable
 }
 
+void decodeNESGfx(HROOM r)
+{
+    // uint16_t width;
+    //esx_f_seek(r, 0x4, ESX_SEEK_SET);
+    // width = readWord(r);
+    esx_f_seek(r, 0xa, ESX_SEEK_SET);
+    uint16_t gdata = readWord(r);
+    esx_f_seek(r, gdata, ESX_SEEK_SET);
+    uint8_t tileset = readByte(r);
+    //DEBUG_PRINTF("decoding gdata %u tileset %u\n", gdata, tileset);
+    decodeTiles(tileset);
+    // decode palette
+    updatePalette(r, PAL_TILES);
+    // decode name table
+    decodeRoomBackground(r);
+ }
+
 static const int v1MMNEScostTables[2][6] = {
 	/* desc lens offs data  gfx  pal */
-	{ 25,  27,  29,  31,  33,  35},
-	{ 26,  28,  30,  32,  34,  36}
+	{  25,  27,  29,  31,   33,  35},
+	{  26,  28,  30,  32,   34,  36}
 };
 
 void graphics_loadCostumeSet(uint8_t n)
@@ -376,27 +392,37 @@ static void decodeNESObject(Object *obj)
     closeRoom(r);
 }
 
-static void clearTalkArea(void)
+static void clearLine(uint8_t y)
 {
-    uint8_t *screen = (uint8_t*)TILEMAP_BASE;
-    uint8_t *end = (uint8_t*)TILEMAP_BASE + SCREEN_TOP * LINE_BYTES;
+    uint8_t *screen = (uint8_t*)TILEMAP_BASE + LINE_BYTES * y;
+    uint8_t *end = screen + LINE_BYTES;
     while (screen != end)
     {
         // hardcoded black tile
-        *screen++ = 1;
         *screen++ = 0;
+        // hardcoded background color offset
+        *screen++ = 3 << 4;
     }
 }
 
-static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap)
+static void clearTalkArea(void)
+{
+    int i;
+    for (i = 0 ; i < SCREEN_TOP ; ++i)
+        clearLine(i);
+}
+
+static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap, uint8_t color)
 {
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + x * TILE_BYTES + y * LINE_BYTES;
     while (*s)
     {
         uint8_t c = *s++;
         if (c == '@')
+        {
             continue;
-        if (c == 1)
+        }
+        else if (c == 1)
         {
             // newline
             if (x != 0)
@@ -406,9 +432,14 @@ static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap)
             }
             continue;
         }
-        if (c == 3)
+        else if (c == 3)
         {
             // next message, should not be passed here
+        }
+        else if (c == 4)
+        {
+            // don't know what code is it, skip
+            continue;
         }
         if (c < 0x20 || c >= 0x80)
         {
@@ -417,7 +448,7 @@ static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap)
         }
         //DEBUG_PRINTF("char %u pattern %u\n", *s, translationTable[*s]);
         *screen++ = translationTable[c];
-        *screen++ = 0;
+        *screen++ = color << 4;
         ++x;
         if (x >= LINE_WIDTH - gap)
         {
@@ -427,15 +458,32 @@ static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap)
     }
 }
 
-void graphics_print(const char *s)
+void graphics_print(const char *s, uint8_t c)
 {
     clearTalkArea();
-    printAtXY(s, TEXT_GAP, 0, TEXT_GAP);
+    // TODO: correct color
+    c = 3;
+    printAtXY(s, TEXT_GAP, 0, TEXT_GAP, c);
+}
+
+void graphics_printSentence(const char *s)
+{
+    clearLine(SCREEN_HEIGHT + SCREEN_TOP);
+    // color offset 3 to match transparent color
+    printAtXY(s, TEXT_GAP, SCREEN_HEIGHT + SCREEN_TOP, TEXT_GAP, 3);
 }
 
 void graphics_drawVerb(VerbSlot *v)
 {
-    printAtXY(v->name, LINE_GAP + v->x, v->y, LINE_GAP);
+    // color offset 3 to match transparent color
+    printAtXY(v->name, LINE_GAP + v->x, v->y, LINE_GAP, 3);
+}
+
+void graphics_drawInventory(uint8_t slot, const char *s)
+{
+    // color offset 3 to match transparent color
+    printAtXY(s, INV_GAP + INV_WIDTH / INV_COLS * (slot % INV_COLS),
+        INV_TOP + slot / INV_COLS, INV_GAP, 3);
 }
 
 void graphics_updateScreen(void)

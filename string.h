@@ -6,7 +6,7 @@
 extern int8_t talkDelay;
 
 uint8_t *message_new(void);
-void message_print(const uint8_t *m);
+void message_print(uint8_t *m, uint8_t c);
 void messages_update(void);
 
 #endif

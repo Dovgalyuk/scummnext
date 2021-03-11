@@ -10,6 +10,7 @@
 #include "object.h"
 #include "sprites.h"
 #include "string.h"
+#include "costume.h"
 
 const int _numRooms = 55;
 
@@ -23,7 +24,6 @@ int _numBitVariables = 4096;			// 2048
 int _numArray = 50;
 int _numNewNames = 50;
 int _numCharsets = 9;					// 9
-int _numInventory = 80;					// 80
 // all scripts are global in MM
 //int _numGlobalScripts = 200;
 int _numFlObject = 50;
@@ -64,6 +64,8 @@ int main()
 	}
 
     closeRoom(f);
+
+    costume_loadData();
 
     initGraphics();
 

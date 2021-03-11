@@ -5,6 +5,8 @@
 #include "resource.h"
 
 #define _numGlobalObjects 775
+#define _numLocalObjects 200
+#define _numInventory 80
 
 enum ObjectStateV2 {
 	kObjectStatePickupable = 1,
@@ -41,6 +43,9 @@ typedef struct Object
     //uint8_t state;
     uint8_t parent;
     uint8_t parentstate;
+    uint8_t preposition;
+    uint8_t room;
+    uint8_t whereis;
     uint8_t nameOffs;
     uint16_t OBIMoffset;
     uint16_t OBCDoffset;
@@ -50,7 +55,7 @@ Object *object_get(uint16_t id);
 Object *object_find(uint16_t x, uint16_t y);
 int8_t object_whereIs(uint16_t id);
 uint16_t object_getVerbEntrypoint(uint16_t obj, uint16_t entry);
-
+uint8_t object_getName(char *s, uint16_t id);
 uint8_t object_getOwner(uint16_t id);
 void object_setOwner(uint16_t id, uint8_t owner);
 
@@ -61,7 +66,13 @@ void object_getXY(uint16_t id, uint8_t *x, uint8_t *y);
 
 void setupRoomObjects(HROOM r);
 void objects_clear(void);
+void objects_redraw(void);
 
 void readGlobalObjects(HROOM r);
+
+
+void inventory_redraw(void);
+void inventory_addObject(Object *obj, uint8_t room);
+uint16_t inventory_checkXY(int8_t x, int8_t y);
 
 #endif

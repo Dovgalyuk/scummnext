@@ -15,3 +15,10 @@ Memory map:
 * Resource heap
 * Costume rooms/offsets
 * Script rooms/offsets
+
+Pages map:
+
+* 2 - tile data
+* 3 - object data
+* 32-43 - scripts
+* 44, 45 - costumes 31 and 32 with sprite data

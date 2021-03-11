@@ -7,6 +7,7 @@
 
 static uint8_t messageBuf[128];
 static uint8_t *curPos;
+static uint8_t color;
 int8_t talkDelay;
 
 
@@ -16,11 +17,12 @@ uint8_t *message_new(void)
     return messageBuf;
 }
 
-void message_print(const uint8_t *m)
+void message_print(uint8_t *m, uint8_t c)
 {
     uint8_t haveMsg = 1;
     //talkDelay += _msgCount * _defaultTalkDelay;
     curPos = m;
+    color = c;
     talkDelay = 0;
     scummVars[VAR_CHARCOUNT] = 0;
     while (*curPos)
@@ -40,7 +42,7 @@ void message_print(const uint8_t *m)
     // TODO: switch between messages
     scummVars[VAR_HAVE_MSG] = haveMsg;
 
-    graphics_print(m);
+    graphics_print(m, color);
 }
 
 void messages_update(void)
@@ -59,5 +61,5 @@ void messages_update(void)
     }
 
     // process next message
-    message_print(curPos + 1);
+    message_print(curPos + 1, color);
 }

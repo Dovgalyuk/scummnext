@@ -7,6 +7,12 @@
 #include "sprites.h"
 #include "debug.h"
 
+extern uint8_t costume31[11234];
+extern uint8_t costume32[140];
+
+#define COST_PAGE0 44
+#define COST_PAGE1 45
+
 static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
 {
     // TODO: sprite and animation allocation
@@ -20,6 +26,7 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
 	// int anim;
 
     uint16_t size = readWord(src);
+    //DEBUG_PRINTF("Costume %d size %d\n", act->costume, size);
     // read data offsets from src
 
     // limb = 0 for v2 scumm
@@ -28,29 +35,33 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
 	// frame = src[src[2 * anim] + frameNum];
 
     // _numAnim = 0x17 => numframes = 6
-    uint8_t anim = act->frame * 4; // + dir (0-3)
+    uint8_t anim = act->frame * 4 + act->facing;
     esx_f_seek(src, 2 * anim, ESX_SEEK_FWD);
     uint8_t begin = readByte(src);
     uint8_t end = readByte(src);
-    //DEBUG_PRINTF("Decode animation %u of %u frames from %u\n", anim, end, begin);
+    DEBUG_PRINTF("Decode animation %u/%u of %u frames from %u\n", anim, act->costume, end, begin);
     DEBUG_ASSERT(end <= MAX_FRAMES, "decodeNESCostume");
     esx_f_seek(src, begin - 2 * anim - 2, ESX_SEEK_FWD);
 
     // read all frames
     animation->frames = end;
     uint8_t f;
+    uint8_t *sprdata = costdata_id == 31 ? costume31 : costume32;
+    uint8_t flipped = act->facing == 1;
     for (f = 0 ; f < end ; ++f)
     {
         uint8_t frame = readByte(src);
 
         uint16_t offset = READ_LE_UINT16(costdesc + v1MMNESLookup[act->costume] * 2 + 2);
         uint8_t numSprites = costlens[offset + frame + 2] + 1;
-        HROOM sprdata = seekResource(&costumes[costdata_id]);
+        //HROOM sprdata = seekResource(&costumes[costdata_id]);
+        // DEBUG_PRINTF("Costume %d size %d\n", costdata_id, sss);
         // offset is the beginning
         // in scummvm data is decoded in backwards direction, from the end
         uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
         //DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
-        esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
+        //esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
+        uint8_t *sprite = sprdata + sprOffs;
 
         // bool flipped = (newDirToOldDir(a->getFacing()) == 1);
         // int left = 239, right = 0, top = 239, bottom = 0;
@@ -63,18 +74,14 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
 
         for (uint8_t spr = 0 ; spr < numSprites ; spr++)
         {
-            uint8_t d0 = readByte(sprdata);
-            uint8_t d1 = readByte(sprdata);
-            uint8_t d2 = readByte(sprdata);
+            uint8_t d0 = *sprite++;
+            uint8_t d1 = *sprite++;
+            uint8_t d2 = *sprite++;
             uint8_t mask;
             uint8_t sprpal = 0;
             int8_t y, x;
 
             mask = (d0 & 0x80) ? 0x01 : 0x80;
-        // 	if (flipped) {
-        // 		mask = (mask == 0x80) ? 0x01 : 0x80;
-        // 		x = -x;
-        // 	}
 
             y = d0 << 1;
             y >>= 1;
@@ -84,6 +91,11 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
             sprpal = (d2 & 0x03) << 2;
             x = d2;
             x >>= 2;
+
+        	if (flipped) {
+        		mask ^= 0x81;//(mask == 0x80) ? 0x01 : 0x80;
+        		x = -x;
+        	}
 
             // setup tile
             graphics_loadSpritePattern(nextSprite, tile, mask, sprpal);
@@ -100,10 +112,12 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
             y = y - animation->ay;
             IO_SPRITE_ATTRIBUTE = x;
             IO_SPRITE_ATTRIBUTE = y;
+            // x is always zero for anchor
+            // for relative this attribute is zero too
+            IO_SPRITE_ATTRIBUTE = 0;//x < 0 ? 1 : 0;
 
             if (nextSprite == anchor)
             {
-                IO_SPRITE_ATTRIBUTE = x < 0 ? 1 : 0;
                 // invisible yet
                 IO_SPRITE_ATTRIBUTE = 0x40 | (nextSprite & 0x3f);
                 // anchor 4-bit sprite
@@ -111,17 +125,15 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
             }
             else
             {
-                IO_SPRITE_ATTRIBUTE = 0;
                 IO_SPRITE_ATTRIBUTE = 0xc0 | (nextSprite & 0x3f);
                 // relative sprite
                 IO_SPRITE_ATTRIBUTE = 0x40;
             }
 
-            //DEBUG_PRINTF("Sprite %d tile=%d x=%d y=%d\n", nextSprite, tile, x, y);
+            //DEBUG_PRINTF("Sprite %d tile=%d/%d x=%d y=%d\n", nextSprite, tile, flipped, x, y);
 
             ++nextSprite;
         }
-        closeRoom(sprdata);
     }
 
 	// DEBUG_PRINTF("Decode costume %u size=%u\n", costume, size);
@@ -134,6 +146,25 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
     return nextSprite;
 }
 
+void costume_loadData(void)
+{
+    uint8_t page0 = ZXN_READ_MMU0();
+    ZXN_WRITE_MMU0(COST_PAGE0);
+    uint8_t page1 = ZXN_READ_MMU1();
+    ZXN_WRITE_MMU1(COST_PAGE1);
+
+    HROOM cost = seekResource(&costumes[31]);
+    readResource(cost, costume31, sizeof(costume31));
+    closeRoom(cost);
+
+    cost = seekResource(&costumes[32]);
+    readResource(cost, costume32, sizeof(costume32));
+    closeRoom(cost);
+
+    ZXN_WRITE_MMU0(page0);
+    ZXN_WRITE_MMU1(page1);
+}
+
 void costume_updateAll(void)
 {
     uint8_t i;
@@ -142,6 +173,11 @@ void costume_updateAll(void)
     graphics_loadSpritePattern(SPRITE_CURSOR,
         // some hack for cursor id
         costdata_id == 32 ? 0xfe : 0xfa, 0x80, 1);
+
+    uint8_t page0 = ZXN_READ_MMU0();
+    ZXN_WRITE_MMU0(COST_PAGE0);
+    uint8_t page1 = ZXN_READ_MMU1();
+    ZXN_WRITE_MMU1(COST_PAGE1);
 
     // for (i = 1 ; i < 64 ; ++i)
     // {
@@ -178,4 +214,7 @@ void costume_updateAll(void)
         IO_SPRITE_ATTRIBUTE = 0;
         ++nextSprite;
     }
+
+    ZXN_WRITE_MMU0(page0);
+    ZXN_WRITE_MMU1(page1);
 }

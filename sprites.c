@@ -63,7 +63,8 @@ static void setTiles(uint16_t count)
         baseTilesCount = count;
     for (uint16_t c = 0 ; c < count ; ++c)
     {
-        // DEBUG_PRINTF("Tile %u: ", c);
+        // if (c == 2)
+        //DEBUG_PRINTF("Tile %u:\n", c);
         for (uint8_t i = 0 ; i < 8 ; ++i)
         {
             uint8_t c0 = tileBuf[c * 16 + i];
@@ -75,10 +76,13 @@ static void setTiles(uint16_t count)
                 uint8_t col2 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
                 uint8_t b = (col1 << 4) | col2;
                 *tiles++ = b;
-                // DEBUG_PRINTF("%x", b);
+                // if (c == 2)
+                //DEBUG_PRINTF("%x%x", col1, col2);
             }
+            //DEBUG_PUTS("\n");
         }
-        // DEBUG_PUTS("\n");
+        // if (c == 2)
+        //DEBUG_PUTS("\n");
         //*screen++ = c;
     }
 }

@@ -13,6 +13,7 @@
 #include "engine.h"
 #include "box.h"
 #include "string.h"
+#include "inventory.h"
 
 #define MAX_SCRIPTS 12
 
@@ -39,6 +40,7 @@ int16_t scummVars[_numVariables];
 static uint8_t curScript;
 static uint8_t opcode;
 static uint8_t exitFlag;
+static uint8_t clickDelay;
 
 // mapped in MMU1 to pages 32-...
 // can be switched for different scripts
@@ -310,10 +312,30 @@ static uint16_t getActiveObject(void)
 
 static void ifStateCommon(uint16_t type)
 {
-	uint8_t obj = getActiveObject();
+	uint16_t obj = getActiveObject();
 
 	jumpRelative((object_getState(obj) & type) != 0);
 }
+
+static void ifNotStateCommon(uint16_t type)
+{
+	uint16_t obj = getActiveObject();
+
+	jumpRelative((object_getState(obj) & type) == 0);
+}
+
+static void clearStateCommon(uint8_t type)
+{
+	uint16_t obj = getActiveObject();
+	object_setState(obj, object_getState(obj) & ~type);
+}
+
+static void setStateCommon(uint8_t type)
+{
+	uint16_t obj = getActiveObject();
+	object_setState(obj, object_getState(obj) | type);
+}
+
 
 ///////////////////////////////////////////////////////////
 // opcodes
@@ -334,6 +356,15 @@ static void op_putActor(void)
 
 	actor_put(act, x, y);
 }
+
+static void op_getActorY(void)
+{
+	getResultPos();
+
+	uint8_t a = getVarOrDirectByte(PARAM_1);
+	setResult(actors[a].y);
+}
+
 
 static void op_startMusic(void)
 {
@@ -386,31 +417,93 @@ static void op_drawObject(void)
 	// putState(obj, getState(od->obj_nr) | kObjectState_08);
 }
 
+static void op_setState04(void)
+{
+	setStateCommon(kObjectStateLocked);
+}
+
+static void op_clearState04(void)
+{
+	clearStateCommon(kObjectStateLocked);
+}
+
+static void op_setState02(void)
+{
+	setStateCommon(kObjectStateUntouchable);
+}
+
+static void op_clearState02(void)
+{
+	clearStateCommon(kObjectStateUntouchable);
+}
+
+static void op_setState01(void)
+{
+	setStateCommon(kObjectStatePickupable);
+}
+
+static void op_clearState01(void)
+{
+	clearStateCommon(kObjectStatePickupable);
+}
+
+static void op_getClosestObjActor(void)
+{
+    // This code can't detect any actors farther away than 255 units
+    // (pixels in newer games, characters in older ones.) But this is
+    // perfectly OK, as it is exactly how the original behaved.
+
+    uint16_t closest_obj = 0xFF, closest_dist = 0xFF;
+
+    getResultPos();
+
+    uint16_t act = getVarOrDirectWord(PARAM_1);
+    uint16_t obj = scummVars[VAR_ACTOR_RANGE_MAX];
+
+    do {
+        uint16_t dist = getObjActToObjActDist(act, obj);
+        if (dist < closest_dist)
+        {
+            closest_dist = dist;
+            closest_obj = obj;
+        }
+    } while (--obj >= scummVars[VAR_ACTOR_RANGE_MIN]);
+
+    setResult(closest_obj);
+}
+
 static void op_setState08(void)
 {
  	uint16_t j = getVarOrDirectWord(PARAM_1);
-    //Object *obj = object_get(j);
+    Object *obj = object_get(j);
     //DEBUG_ASSERT(obj, "op_setState08");
-    DEBUG_PRINTF("setState08 %u\n", j);
+    //DEBUG_PRINTF("setState08 %u\n", j);
 
     object_setState(j, object_getState(j) | kObjectState_08);
 	// markObjectRectAsDirty(obj);
 	// clearDrawObjectQueue();
 
-	graphics_drawObject(object_get(j));
+    if (obj)
+    {
+	    graphics_drawObject(obj);
+    }
 }
 
 static void op_clearState08(void)
 {
     uint16_t j = getActiveObject();
     //Object *obj = object_get(j);
-    DEBUG_PRINTF("clearState08 %u\n", j);
+    //DEBUG_PRINTF("clearState08 %u\n", j);
 
     object_setState(j, object_getState(j) & ~kObjectState_08);
     //markObjectRectAsDirty(obj);
     //clearDrawObjectQueue();
 
-	graphics_drawObject(object_get(j));
+    Object *obj = object_get(j);
+    if (obj)
+    {
+	    objects_redraw();
+    }
 }
 
 static void op_resourceRoutines(void)
@@ -427,7 +520,7 @@ static void op_animateActor(void)
 {
 	uint8_t act = getVarOrDirectByte(PARAM_1);
 	uint8_t anim = getVarOrDirectByte(PARAM_2);
-    DEBUG_PRINTF("animateActor %u %u\n", act, anim);
+    //DEBUG_PRINTF("animateActor %u %u\n", act, anim);
 
 	actor_animate(act, anim);
 }
@@ -517,6 +610,11 @@ static void op_waitForMessage(void)
 	}
 }
 
+static void op_ifNotState04(void)
+{
+    ifNotStateCommon(kObjectStateLocked);
+}
+
 static void op_actorOps(void)
 {
 	uint8_t act = getVarOrDirectByte(PARAM_1);
@@ -526,7 +624,8 @@ static void op_actorOps(void)
 	if (act == 0 && opcode == 5) {
 		// This case happens in the Zak/MM bootscripts, to set the default talk color (9).
 		//_string[0].color = arg;
-        DEBUG_PRINTF("TODO: Set default talk color %u\n", arg);
+        //DEBUG_PRINTF("TODO: Set default talk color %u\n", arg);
+        defaultTalkColor = arg;
 		return;
 	}
 
@@ -535,7 +634,7 @@ static void op_actorOps(void)
 	switch (opcode) {
 	case 1:		// SO_SOUND
 		//a->_sound[0] = arg;
-        DEBUG_PRINTF("TODO: Set actor %u sound %u\n", act, arg);
+        //DEBUG_PRINTF("TODO: Set actor %u sound %u\n", act, arg);
 		break;
 	// case 2:		// SO_PALETTE
     //     i = fetchScriptByte();
@@ -562,14 +661,24 @@ static void op_actorOps(void)
         actor_setCostume(act, arg);
 		break;
 	case 5:		// SO_TALK_COLOR
-        //a->_talkColor = arg;
-        DEBUG_PRINTF("TODO: Set actor %u talk color %u\n", act, arg);
+        // not used with NES sprites
+        //actor_setTalkColor(act, arg);
 		break;
 	default:
 		DEBUG_PRINTF("actorOps: opcode %u not yet supported\n", opcode);
         DEBUG_HALT;
 	}
 }
+
+static void op_actorFromPos(void)
+{
+	uint8_t x, y;
+	getResultPos();
+	x = getVarOrDirectByte(PARAM_1);// * V12_X_MULTIPLIER;
+	y = getVarOrDirectByte(PARAM_2);// * V12_Y_MULTIPLIER;
+	setResult(actor_getFromPos(x, y));
+}
+
 
 static void op_print(void)
 {
@@ -583,7 +692,7 @@ static void op_putActorAtObject(void)
 {
     uint8_t x, y;
     uint8_t a = getVarOrDirectByte(PARAM_1);
-	uint8_t obj = getVarOrDirectWord(PARAM_2);
+	uint16_t obj = getVarOrDirectWord(PARAM_2);
 	if (object_whereIs(obj) != WIO_NOT_FOUND)
     {
 		object_getXY(obj, &x, &y);
@@ -594,6 +703,11 @@ static void op_putActorAtObject(void)
 	}
 
     actor_put(a, x, y);
+}
+
+static void op_ifNotState08(void)
+{
+    ifNotStateCommon(kObjectState_08);
 }
 
 static void op_printEgo(void)
@@ -681,7 +795,8 @@ static void op_verbOps(void)
         VerbSlot *vs = &verbs[slot];
         vs->verbid = verb;
         vs->x = x;
-        vs->y = y;
+        // Vertical offset -2 for ZXNext
+        vs->y = y - 2;
 		vs->curmode = 1;
 
         // static const char keyboard[] = {
@@ -781,6 +896,14 @@ static void op_isLessEqual(void)
 	jumpRelative(b <= a);
 }
 
+static void op_subtract(void)
+{
+	int16_t a;
+	getResultPos();
+	a = getVarOrDirectWord(PARAM_1);
+	scummVars[script_resultVarNumber] -= a;
+}
+
 static void op_waitForActor(void)
 {
     uint8_t act = getVarOrDirectByte(PARAM_1);
@@ -849,6 +972,15 @@ static void op_isEqual(void)
 	jumpRelative(b == a);
 }
 
+static void op_chainScript(void)
+{
+	uint8_t script = getVarOrDirectByte(PARAM_1);
+	//stopScript(vm.slot[_currentScript].number);
+    op_stopObjectCode();
+	//_currentScript = 0xFF;
+	runScript(script);
+}
+
 static void op_pickupObject(void)
 {
 	int id = getVarOrDirectWord(PARAM_1);
@@ -862,13 +994,13 @@ static void op_pickupObject(void)
 
     DEBUG_PRINTF("Pickup object %u by %u\n", id, scummVars[VAR_EGO]);
 
-	//addObjectToInventory(obj, _roomResource);
+	inventory_addObject(obj, currentRoom);
 	//markObjectRectAsDirty(obj);
     object_setOwner(id, scummVars[VAR_EGO]);
 	object_setState(id, object_getState(id) | kObjectState_08 | kObjectStateUntouchable);
-	//clearDrawObjectQueue();
+	objects_redraw();
 
-	//runInventoryScript(1);
+	runInventoryScript(1);
 	//if (_game.platform == Common::kPlatformNES)
     //		_sound->addSoundToQueue(51);	// play 'pickup' sound
 }
@@ -944,7 +1076,7 @@ static void op_cursorCommand(void)
 	uint16_t cmd = getVarOrDirectWord(PARAM_1);
 	uint8_t state = cmd >> 8;
 
-    DEBUG_PRINTF("Set cursor state %x user state %x\n", cmd & 0xff, state);
+    //DEBUG_PRINTF("Set cursor state %x user state %x\n", cmd & 0xff, state);
 	if (cmd & 0xFF) {
 		scummVars[VAR_CURSORSTATE] = cmd & 0xFF;
 	}
@@ -1019,6 +1151,11 @@ static void op_setOwnerOf(void)
 	owner = getVarOrDirectByte(PARAM_2);
 
 	object_setOwner(obj, owner);
+}
+
+static void op_ifState04(void)
+{
+    ifStateCommon(kObjectStateLocked);
 }
 
 static void op_lights(void)
@@ -1100,19 +1237,24 @@ static void op_findObject(void)
 	uint16_t x = getVarOrDirectByte(PARAM_1);// * V12_X_MULTIPLIER;
 	uint16_t y = getVarOrDirectByte(PARAM_2);// * V12_Y_MULTIPLIER;
 	obj = object_find(x, y);
+
 	// if (obj == 0 && (_game.platform == Common::kPlatformNES) && (_userState & USERSTATE_IFACE_INVENTORY)) {
 	// 	if (_mouseOverBoxV2 >= 0 && _mouseOverBoxV2 < 4)
 	// 		obj = findInventory(VAR(VAR_EGO), _mouseOverBoxV2 + _inventoryOffset + 1);
 	// }
+    uint16_t res = 0;
     if (obj)
     {
         //DEBUG_PRINTF("Found object %d x=%d y=%d\n", obj->obj_nr, obj->x, obj->y);
-	    setResult(obj->obj_nr);
+        res = obj->obj_nr;
     }
     else
     {
-        setResult(0);
+        y = y / (8 / V12_Y_MULTIPLIER) + SCREEN_TOP;
+        if (y >= INV_TOP)
+            res = inventory_checkXY(x, y);
     }
+    setResult(res);
 }
 
 static void op_walkActorToObject(void)
@@ -1125,10 +1267,19 @@ static void op_walkActorToObject(void)
 	}
 }
 
+static uint8_t getPreposition(char *s)
+{
+    // _sentenceBuf += (const char *)(getResourceAddress(rtCostume, 78) + VAR(VAR_SENTENCE_PREPOSITION) * 8 + 2);
+    HROOM r = seekResource(&costumes[78]);
+    seekFwd(r, scummVars[VAR_SENTENCE_PREPOSITION] * 8 + 2);
+    uint8_t len = readString(r, s);
+    closeRoom(r);
+    return len;
+}
+
+
 static void op_drawSentence(void)
 {
-	// Common::Rect sentenceline;
-	// const byte *temp;
     uint8_t slot = verb_getSlot(scummVars[VAR_SENTENCE_VERB], 0);
     char *buf = message_new();
     char *s = buf;
@@ -1137,10 +1288,14 @@ static void op_drawSentence(void)
 	//       (_game.platform == Common::kPlatformNES && (_userState & USERSTATE_IFACE_ALL))))
 	// 	return;
 
-	// if (getResourceAddress(rtVerb, slot))
-	// 	_sentenceBuf = (char *)getResourceAddress(rtVerb, slot);
-	// else
-	// 	return;
+    if (verbs[slot].verbid)
+    {
+        s += strcopy(s, verbs[slot].name);
+    }
+    else
+    {
+        return;
+    }
 
     if (scummVars[VAR_SENTENCE_OBJECT1] > 0) {
         uint8_t len = getObjOrActorName(s + 1, scummVars[VAR_SENTENCE_OBJECT1]);
@@ -1151,9 +1306,11 @@ static void op_drawSentence(void)
         }
     }
 
-	// if (0 < VAR(VAR_SENTENCE_PREPOSITION) && VAR(VAR_SENTENCE_PREPOSITION) <= 4) {
-	// 	drawPreposition(VAR(VAR_SENTENCE_PREPOSITION));
-	// }
+	if (0 < scummVars[VAR_SENTENCE_PREPOSITION] && scummVars[VAR_SENTENCE_PREPOSITION] <= 4)
+    {
+		uint8_t len = getPreposition(s);
+        s += len;
+	}
 
     if (scummVars[VAR_SENTENCE_OBJECT2] > 0) {
         uint8_t len = getObjOrActorName(s + 1, scummVars[VAR_SENTENCE_OBJECT1]);
@@ -1205,7 +1362,7 @@ static void op_drawSentence(void)
 
     // TODO: special codes
     DEBUG_PRINTF("Draw sentence '%s'\n", buf);
-    message_print(buf);
+    graphics_printSentence(buf);
 }
 
 static void op_doSentence(void)
@@ -1300,6 +1457,23 @@ static void op_doSentence(void)
 	}
 }
 
+static void op_getObjPreposition(void)
+{
+	getResultPos();
+	uint16_t obj = getVarOrDirectWord(PARAM_1);
+
+	if (object_whereIs(obj) != WIO_NOT_FOUND)
+    {
+		// byte *ptr = getOBCDFromObject(obj) + 12;
+		// setResult(*ptr >> 5);
+        setResult(object_get(obj)->preposition);
+	}
+    else
+    {
+		setResult(0xFF);
+	}
+}
+
 static void op_getDist(void)
 {
 	getResultPos();
@@ -1329,87 +1503,256 @@ static OpcodeFunc opcodes[0x100] = {
     [0x01] = op_putActor,
     [0x02] = op_startMusic,
     [0x03] = op_getActorRoom,
+    [0x04] = op_isGreaterEqual,
     [0x05] = op_drawObject,
+    //[0x06] = op_getActorElevation,
     [0x07] = op_setState08,
     [0x08] = op_isNotEqual,
+ 	//[0x09] = op_faceActor,
+	//[0x0a] = op_assignVarWordIndirect,
+	//[0x0b] = op_setObjPreposition,
     [0x0c] = op_resourceRoutines,
     [0x0d] = op_walkActorToActor,
     [0x0e] = op_putActorAtObject,
+    [0x0f] = op_ifNotState08,
     [0x10] = op_getObjectOwner,
     [0x11] = op_animateActor,
     [0x12] = op_panCameraTo,
     [0x13] = op_actorOps,
     [0x14] = op_print,
+    [0x15] = op_actorFromPos,
     [0x16] = op_getRandomNr,
+    [0x17] = op_clearState02,
     [0x18] = op_jumpRelative,
     [0x19] = op_doSentence,
     [0x1a] = op_move,
     [0x1b] = op_setBitVar,
     [0x1c] = op_startSound,
+    //[0x1d] = op_ifClassOfIs,
     [0x1e] = op_walkActorTo,
+    //[0x1f] = op_ifState02,
     [0x20] = op_stopMusic,
+ 	[0x21] = op_putActor,
+	//[0x22] = op_saveLoadGame,
+	[0x23] = op_getActorY,
     [0x24] = op_loadRoomWithEgo,
+    [0x25] = op_drawObject,
     [0x26] = op_setVarRange,
+    [0x27] = op_setState04,
     [0x28] = op_equalZero,
+    [0x29] = op_setOwnerOf,
+    //[0x2a] = op_addIndirect,
     [0x2b] = op_delayVariable,
     [0x2c] = op_assignVarByte,
     [0x2d] = op_putActorInRoom,
     [0x2e] = op_delay,
+    [0x2f] = op_ifNotState04,
+	//[0x30] = op_setBoxFlags,
+	[0x31] = op_getBitVar,
     [0x32] = op_setCameraAt,
+	//[0x33] = op_roomOps,
+	[0x34] = op_getDist,
+	[0x35] = op_findObject,
+    [0x36] = op_walkActorToObject,
+    [0x37] = op_setState01,
     [0x38] = op_isLessEqual,
+	[0x39] = op_doSentence,
+    [0x3a] = op_subtract,
     [0x3b] = op_waitForActor,
     [0x3c] = op_stopSound,
+	//[0x3d] = op_setActorElevation,
+	[0x3e] = op_walkActorTo,
+	//[0x3f] = op_ifNotState01,
     [0x40] = op_cutscene,
+	[0x41] = op_putActor,
     [0x42] = op_startScript,
     [0x43] = op_getActorX,
     [0x44] = op_isLess,
+	[0x45] = op_drawObject,
     [0x46] = op_increment,
     [0x47] = op_clearState08,
     [0x48] = op_isEqual,
+	//[0x49] = op_faceActor,
+    [0x4a] = op_chainScript,
+	//[0x4b] = op_setObjPreposition,
+	//[0x4c] = op_waitForSentence,
+	[0x4d] = op_walkActorToActor,
+	[0x4e] = op_putActorAtObject,
     [0x4f] = op_ifState08,
     [0x50] = op_pickupObject,
+	[0x51] = op_animateActor,
     [0x52] = op_actorFollowCamera,
     [0x53] = op_actorOps,
+	//[0x54] = op_setObjectName,
+	[0x55] = op_actorFromPos,
+	//[0x56] = op_getActorMoving,
+	[0x57] = op_setState02,
     [0x58] = op_beginOverride,
+    [0x59] = op_doSentence,
     [0x5a] = op_add,
     [0x5b] = op_setBitVar,
+	//[0x5c] = op_dummy,
+	//[0x5d] = op_ifClassOfIs,
+	[0x5e] = op_walkActorTo,
+	//[0x5f] = op_ifNotState02,
     [0x60] = op_cursorCommand,
+	[0x61] = op_putActor,
     [0x62] = op_stopScript,
+	//[0x63] = op_getActorFacing,
+	[0x64] = op_loadRoomWithEgo,
+	[0x65] = op_drawObject,
+	//[0x66] = op_getClosestObjActor,
+	[0x67] = op_clearState04,
     [0x68] = op_isScriptRunning,
     [0x69] = op_setOwnerOf,
+	//[0x6a] = op_subIndirect,
+	//[0x6b] = op_dummy,
+	[0x6c] = op_getObjPreposition,
+	[0x6d] = op_putActorInRoom,
+	//[0x6e] = op_dummy,
+    [0x6f] = op_ifState04,
     [0x70] = op_lights,
+	//[0x71] = op_getActorCostume,
     [0x72] = op_loadRoom,
+	//[0x73] = op_roomOps,
+	[0x74] = op_getDist,
+	[0x75] = op_findObject,
+	[0x76] = op_walkActorToObject,
+	//[0x77] = op_clearState01,
     [0x78] = op_isGreater,
+	[0x79] = op_doSentence,
     [0x7a] = op_verbOps,
+	//[0x7b] = op_getActorWalkBox,
     [0x7c] = op_isSoundRunning,
+	//[0x7d] = op_setActorElevation,
+	[0x7e] = op_walkActorTo,
+	[0x7f] = op_ifState01,
     [0x80] = op_breakHere,
     [0x81] = op_putActor,
+	[0x82] = op_startMusic,
+    [0x83] = op_getActorRoom,
     [0x84] = op_isGreaterEqual,
     [0x85] = op_drawObject,
+	//[0x86] = op_getActorElevation,
+    [0x87] = op_setState08,
     [0x88] = op_isNotEqual,
+	//[0x89] = op_faceActor,
+	//[0x8a] = op_assignVarWordIndirect,
+	//[0x8b] = op_setObjPreposition,
+	[0x8c] = op_resourceRoutines,
+	[0x8d] = op_walkActorToActor,
+	[0x8e] = op_putActorAtObject,
+	[0x8f] = op_ifNotState08,
     [0x90] = op_getObjectOwner,
-    [0x91] = op_getObjectOwner,
+    [0x91] = op_animateActor,
+	[0x92] = op_panCameraTo,
+	[0x93] = op_actorOps,
     [0x94] = op_print,
+	[0x95] = op_actorFromPos,
+	[0x96] = op_getRandomNr,
+	[0x97] = op_clearState02,
+	//[0x98] = op_restart,
+	[0x99] = op_doSentence,
     [0x9a] = op_move,
+	[0x9b] = op_setBitVar,
+	[0x9c] = op_startSound,
+	//[0x9d] = op_ifClassOfIs,
+	[0x9e] = op_walkActorTo,
+	//[0x9f] = op_ifState02,
     [0xa0] = op_stopObjectCode,
+	[0xa1] = op_putActor,
+	//[0xa2] = o4_saveLoadGame,
+	//[0xa3] = op_getActorY,
+	[0xa4] = op_loadRoomWithEgo,
+	[0xa5] = op_drawObject,
+	[0xa6] = op_setVarRange,
+	[0xa7] = op_setState04,
     [0xa8] = op_isNotEqualZero,
+	[0xa9] = op_setOwnerOf,
+	//[0xaa] = op_addIndirect,
     [0xab] = op_switchCostumeSet,
     [0xac] = op_drawSentence,
     [0xad] = op_putActorInRoom,
     [0xae] = op_waitForMessage,
+    [0xaf] = op_ifNotState04,
+	//[0xb0] = op_setBoxFlags,
     [0xb1] = op_getBitVar,
+	[0xb2] = op_setCameraAt,
+	//[0xb3] = op_roomOps,
+	[0xb4] = op_getDist,
+	[0xb5] = op_findObject,
+	[0xb6] = op_walkActorToObject,
+	[0xb7] = op_setState01,
+	[0xb8] = op_isLessEqual,
+	[0xb9] = op_doSentence,
+	[0xba] = op_subtract,
     [0xbb] = op_waitForActor,
+	[0xbc] = op_stopSound,
+	//[0xbd] = op_setActorElevation,
+	[0xbe] = op_walkActorTo,
+	//[0xbf] = op_ifNotState01,
     [0xc0] = op_endCutscene,
+	[0xc1] = op_putActor,
+	[0xc2] = op_startScript,
+	[0xc3] = op_getActorX,
+	[0xc4] = op_isLess,
+	[0xc5] = op_drawObject,
+	//[0xc6] = op_decrement,
+    [0xc7] = op_clearState08,
     [0xc8] = op_isEqual,
+	//[0xc9] = op_faceActor,
+	[0xca] = op_chainScript,
+	//[0xcb] = op_setObjPreposition,
+	//[0xcc] = op_pseudoRoom,
+	[0xcd] = op_walkActorToActor,
     [0xce] = op_putActorAtObject,
     [0xcf] = op_ifState08,
+    [0xd0] = op_pickupObject,
+	[0xd1] = op_animateActor,
+    [0xd2] = op_actorFollowCamera,
+	[0xd3] = op_actorOps,
+	//[0xd4] = op_setObjectName,
+	[0xd5] = op_actorFromPos,
+	//[0xd6] = op_getActorMoving,
+	[0xd7] = op_setState02,
     [0xd8] = op_printEgo,
     [0xd9] = op_doSentence,
+    [0xda] = op_add,
+	[0xdb] = op_setBitVar,
+	//[0xdc] = op_dummy,
+	//[0xdd] = op_ifClassOfIs,
+	[0xde] = op_walkActorTo,
+	//[0xdf] = op_ifNotState02,
+	[0xe0] = op_cursorCommand,
+	[0xe1] = op_putActor,
+	[0xe2] = op_stopScript,
+	//[0xe3] = op_getActorFacing,
+	[0xe4] = op_loadRoomWithEgo,
+	[0xe5] = op_drawObject,
+	[0xe6] = op_getClosestObjActor,
+	//[0xe7] = op_clearState04,
+	[0xe8] = op_isScriptRunning,
+	[0xe9] = op_setOwnerOf,
+	//[0xea] = op_subIndirect,
+	//[0xeb] = op_dummy,
+    [0xec] = op_getObjPreposition,
+	[0xed] = op_putActorInRoom,
+	//[0xee] = op_dummy,
+	[0xef] = op_ifState04,
+    [0xf0] = op_lights,
+	//[0xf1] = op_getActorCostume,
+	[0xf2] = op_loadRoom,
+	//[0xf3] = op_roomOps,
     [0xf4] = op_getDist,
     [0xf5] = op_findObject,
     [0xf6] = op_walkActorToObject,
+	[0xf7] = op_clearState01,
+	[0xf8] = op_isGreater,
     [0xf9] = op_doSentence,
     [0xfa] = op_verbOps,
+	//[0xfb] = op_getActorWalkBox,
+	[0xfc] = op_isSoundRunning,
+	//[0xfd] = op_setActorElevation,
     [0xfe] = op_walkActorTo,
     [0xff] = op_ifState01,
 };
@@ -1428,8 +1771,9 @@ void executeScript(void)
     }
     while (!exitFlag)
     {
-        //DEBUG_PRINTF("EXEC %u 0x%x\n", stack[curScript].id, stack[curScript].offset - 4);
         opcode = fetchScriptByte();
+        // if (script_id == 4)
+        // DEBUG_PRINTF("EXEC %u 0x%x op=%x\n", script_id, script_offset - 5, opcode);
         OpcodeFunc f = opcodes[opcode];
         if (!f)
         {
@@ -1437,274 +1781,6 @@ void executeScript(void)
             DEBUG_HALT;
         }
         f();
-        //DEBUG_PRINTF("--- opcode 0x%x\n", opcode);
-        // switch (opcode)
-        // {
-        // case 0x00:
-        //     op_stopObjectCode();
-        //     break;
-        // case 0x01:
-        //     op_putActor();
-        //     break;
-        // case 0x02:
-        //     op_startMusic();
-        //     break;
-        // case 0x03:
-        //     op_getActorRoom();
-        //     break;
-        // case 0x05:
-        //     op_drawObject();
-        //     break;
-        // case 0x07:
-        //     op_setState08();
-        //     break;
-        // case 0x08:
-        //     op_isNotEqual();
-        //     break;
-        // case 0x0c:
-        //     op_resourceRoutines();
-        //     break;
-        // case 0x0d:
-        //     op_walkActorToActor();
-        //     break;
-        // case 0x0e:
-        //     op_putActorAtObject();
-        //     break;
-        // case 0x10:
-        //     op_getObjectOwner();
-        //     break;
-        // case 0x11:
-        //     op_animateActor();
-        //     break;
-        // case 0x12:
-        //     op_panCameraTo();
-        //     break;
-        // case 0x13:
-        // case 0x53:
-        //     op_actorOps();
-        //     break;
-        // case 0x14:
-        //     op_print();
-        //     break;
-        // case 0x16:
-        //     op_getRandomNr();
-        //     break;
-        // case 0x18:
-        //     op_jumpRelative();
-        //     break;
-        // case 0x19:
-        //     op_doSentence();
-        //     break;
-        // case 0x1a:
-        //     op_move();
-        //     break;
-        // case 0x1b:
-        // case 0x5b:
-        //     op_setBitVar();
-        //     break;
-        // case 0x1c:
-        //     op_startSound();
-        //     break;
-        // case 0x1e:
-        //     op_walkActorTo();
-        //     break;
-        // case 0x20:
-        //     op_stopMusic();
-        //     break;
-        // case 0x24:
-        //     op_loadRoomWithEgo();
-        //     break;
-        // case 0x26:
-        //     op_setVarRange();
-        //     break;
-        // case 0x28:
-        //     op_equalZero();
-        //     break;
-        // case 0x2b:
-        //     op_delayVariable();
-        //     break;
-        // case 0x2c:
-        //     op_assignVarByte();
-        //     break;
-        // case 0x2d:
-        //     op_putActorInRoom();
-        //     break;
-        // case 0x2e:
-        //     op_delay();
-        //     break;
-        // case 0x32:
-        //     op_setCameraAt();
-        //     break;
-        // case 0x38:
-        //     op_isLessEqual();
-        //     break;
-        // case 0x3b:
-        //     op_waitForActor();
-        //     break;
-        // case 0x3c:
-        //     op_stopSound();
-        //     break;
-        // case 0x40:
-        //     op_cutscene();
-        //     break;
-        // case 0x42:
-        //     op_startScript();
-        //     break;
-        // case 0x43:
-        //     op_getActorX();
-        //     break;
-        // case 0x44:
-        //     op_isLess();
-        //     break;
-        // case 0x46:
-        //     op_increment();
-        //     break;
-        // case 0x47:
-        //     op_clearState08();
-        //     break;
-        // case 0x48:
-        //     op_isEqual();
-        //     break;
-        // case 0x4f:
-        //     op_ifState08();
-        //     break;
-        // case 0x50:
-        //     op_pickupObject();
-        //     break;
-        // case 0x52:
-        //     op_actorFollowCamera();
-        //     break;
-        // case 0x58:
-        //     op_beginOverride();
-        //     break;
-        // case 0x5a:
-        //     op_add();
-        //     break;
-        // case 0x60:
-        //     op_cursorCommand();
-        //     break;
-        // case 0x62:
-        //     op_stopScript();
-        //     break;
-        // // case 0x64:
-        // //     op_loadRoomWithEgo();
-        // //     break;
-        // case 0x68:
-        //     op_isScriptRunning();
-        //     break;
-        // case 0x69:
-        //     op_setOwnerOf();
-        //     break;
-        // case 0x70:
-        //     op_lights();
-        //     break;
-        // case 0x72:
-        //     op_loadRoom();
-        //     break;
-        // case 0x78:
-        //     op_isGreater();
-        //     break;
-        // case 0x7a:
-        //     op_verbOps();
-        //     break;
-        // case 0x7c:
-        //     op_isSoundRunning();
-        //     break;
-        // case 0x80:
-        //     op_breakHere();
-        //     break;
-        // case 0x81:
-        //     op_putActor();
-        //     break;
-        // case 0x84:
-        //     op_isGreaterEqual();
-        //     break;
-        // case 0x85:
-        //     op_drawObject();
-        //     break;
-        // case 0x88:
-        //     op_isNotEqual();
-        //     break;
-        // case 0x90:
-        //     op_getObjectOwner();
-        //     break;
-        // case 0x91:
-        //     op_getObjectOwner();
-        //     break;
-        // case 0x94:
-        //     op_print();
-        //     break;
-        // case 0x9a:
-        //     op_move();
-        //     break;
-        // case 0xa0:
-        //     op_stopObjectCode();
-        //     break;
-        // case 0xa8:
-        //     op_isNotEqualZero();
-        //     break;
-        // case 0xab:
-        //     op_switchCostumeSet();
-        //     break;
-        // case 0xac:
-        //     op_drawSentence();
-        //     break;
-        // case 0xad:
-        //     op_putActorInRoom();
-        //     break;
-        // case 0xae:
-        //     op_waitForMessage();
-        //     break;
-        // case 0xb1:
-        //     op_getBitVar();
-        //     break;
-        // case 0xbb:
-        //     op_waitForActor();
-        //     break;
-        // case 0xc0:
-        //     op_endCutscene();
-        //     break;
-        // case 0xc8:
-        //     op_isEqual();
-        //     break;
-        // case 0xce:
-        //     op_putActorAtObject();
-        //     break;
-        // case 0xcf:
-        //     op_ifState08();
-        //     break;
-        // case 0xd8:
-        //     op_printEgo();
-        //     break;
-        // case 0xd9:
-        //     op_doSentence();
-        //     break;
-        // case 0xf4:
-        //     op_getDist();
-        //     break;
-        // case 0xf5:
-        //     op_findObject();
-        //     break;
-        // case 0xf6:
-        //     op_walkActorToObject();
-        //     break;
-        // case 0xf9:
-        //     op_doSentence();
-        //     break;
-        // case 0xfa:
-        //     op_verbOps();
-        //     break;
-        // case 0xfe:
-        //     op_walkActorTo();
-        //     break;
-        // case 0xff:
-        //     op_ifState01();
-        //     break;
-        // default:
-        //     DEBUG_PRINTF("Unknown opcode %x\n", opcode);
-        //     DEBUG_HALT;
-        //     break;
-        // }
     }
 }
 
@@ -1824,8 +1900,15 @@ void updateScummVars(void)
 
     // mouse and keyboard input
     uint16_t s = 0;
-    if (!(IO_7FFE & 1))
+    if (clickDelay)
+    {
+        --clickDelay;
+    }
+    else if (!(IO_7FFE & 1))
+    {
         s = MBS_LEFT_CLICK; 
+        clickDelay = 30;
+    }
 	scummVars[VAR_KEYPRESS] = s;
 
 	// if (VAR_KEYPRESS != 0xFF && _mouseAndKeyboardStat) {		// Key Input
@@ -1923,12 +2006,13 @@ void checkExecVerbs(void)
 				// Verb was clicked
 				runInputScript(kVerbClickArea, verbs[over].verbid);
             }
-            if (y > SCREEN_TOP + SCREEN_HEIGHT + 6)
+            if (y >= INV_TOP)
             {
-            // 	// Click into V2 inventory
-            // 	int object = checkV2Inventory(_mouse.x, _mouse.y);
-            // 	if (object > 0)
-            // 		runInputScript(kInventoryClickArea, object, 0);
+            	// Click into V2 inventory
+            	uint16_t object = inventory_checkXY(x, y);
+                DEBUG_PRINTF("Clicked object %u\n", object);
+            	if (object > 0)
+            		runInputScript(kInventoryClickArea, object);
             }
         }
         else if (zone == kMainVirtScreen)
@@ -1972,6 +2056,7 @@ void checkAndRunSentenceScript(void)
 
 void runInventoryScript(uint16_t i)
 {
+    inventory_redraw();
     //void ScummEngine_v2::redrawV2Inventory()
 
     // not needed

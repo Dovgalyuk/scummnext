@@ -6,12 +6,19 @@
 #include "actor.h"
 #include "verbs.h"
 
-#define SCREEN_TOP 4
+#define SCREEN_TOP 2
 #define SCREEN_WIDTH 32
 #define SCREEN_HEIGHT 16
 #define LINE_WIDTH 40
 #define LINE_GAP ((LINE_WIDTH - SCREEN_WIDTH) / 2)
 #define TEXT_GAP (LINE_GAP + 2)
+#define SENTENCE_HEIGHT 2
+#define VERB_HEIGHT 4
+#define INV_GAP (LINE_GAP + 2)
+#define INV_WIDTH (SCREEN_WIDTH - 4)
+#define INV_TOP (SCREEN_TOP + SCREEN_HEIGHT + SENTENCE_HEIGHT + VERB_HEIGHT)
+#define INV_COLS 2
+#define INV_ROWS 2
 
 #define TILEMAP_BASE 0x6000
 #define TILE_BASE 0x4000
@@ -45,13 +52,16 @@ void initGraphics(void);
 
 void decodeNESTrTable(void);
 void decodeNESGfx(HROOM r);
+void decodeRoomBackground(HROOM r);
 
 void graphics_updateScreen(void);
 
 void graphics_loadCostumeSet(uint8_t n);
-void graphics_print(const char *s);
+void graphics_print(const char *s, uint8_t c);
+void graphics_printSentence(const char *s);
 void graphics_drawObject(Object *obj);
 void graphics_drawVerb(VerbSlot *v);
+void graphics_drawInventory(uint8_t slot, const char *s);
 
 uint8_t graphics_findVirtScreen(uint8_t y);
 

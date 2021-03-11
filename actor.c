@@ -23,6 +23,7 @@ enum MoveFlags {
 	MF_FROZEN = 0x80
 };
 
+uint8_t defaultTalkColor;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Actor internals
@@ -32,7 +33,7 @@ static void actor_setBox(Actor *a, uint8_t box)
 {
     a->walkbox = box;
     // setupActorScale();
-    DEBUG_PRINTF("Set box %u\n", box);
+    // DEBUG_PRINTF("Set box %u\n", box);
 }
 
 static void actor_calcMovementFactor(Actor *a, uint8_t nextX, uint8_t nextY)
@@ -76,12 +77,38 @@ static void actor_calcMovementFactor(Actor *a, uint8_t nextX, uint8_t nextY)
     a->nextX = nextX;
     a->nextY = nextY;
 
+    uint8_t dir = 0;
+    int32_t xx = V12_X_MULTIPLIER * a->deltaXFactor;
+    xx = ABS(xx);
+    int32_t yy = V12_Y_MULTIPLIER * a->deltaYFactor;
+    yy = ABS(yy);
+    if (yy * 2 < xx)
+    {
+        if (a->deltaXFactor > 0)
+            dir = 1; // 90
+        else
+            dir = 0; // 270
+    }
+    else
+    {
+        if (a->deltaYFactor > 0)
+            dir = 2; // 180
+        else
+            dir = 3; // 0
+    }
+    
+    a->targetFacing = dir;
     // _targetFacing = getAngleFromPos(V12_X_MULTIPLIER*deltaXFactor, V12_Y_MULTIPLIER*deltaYFactor, false);
 }
 
 static void actor_walkStep(Actor *a)
 {
-    // nextFacing = updateActorDirection(true);
+    if (a->facing != a->targetFacing)
+    {
+        // nextFacing = updateActorDirection(true);
+        // TODO nextFacing
+        a->moving |= MF_TURN;
+    }
     if (!(a->moving & MF_IN_LEG)/* || _facing != nextFacing*/)
     {
     //     if (_walkFrame != _frame || _facing != nextFacing) {
@@ -96,8 +123,6 @@ static void actor_walkStep(Actor *a)
     }
 
     //DEBUG_PRINTF("factorX=%l factorY=%l\n", deltaXFactor, deltaYFactor);
-
-    // _targetFacing = getAngleFromPos(V12_X_MULTIPLIER*deltaXFactor, V12_Y_MULTIPLIER*deltaYFactor, false);
 
 	uint8_t distX = ABS(a->nextX - a->curX);
 	uint8_t distY = ABS(a->nextY - a->curY);
@@ -152,43 +177,61 @@ static void actor_walk(Actor *a)
     //     }
     //     return;
     // }
+    if (a->moving & MF_TURN)
+    {
+        // TODO: animation?
+        if (a->facing != a->targetFacing)
+        {
+            a->facing = a->targetFacing;
+            a->moving &= ~MF_TURN;
+            costume_updateAll();
+        }
+        else
+        {
+            a->moving = 0;
+        }
+        return;
+    }
 
     if (a->moving & MF_IN_LEG) {
         actor_walkStep(a);
+    } else if (a->moving & MF_LAST_LEG) {
+        a->moving = 0;
+        // startAnimActor(_standFrame);
+        // if (a->targetFacing != a->destdir && a->destdir != -1)
+        // {
+        //     a->targetFacing = a->destdir;
+        //     a->moving = MF_TURN;
+        // }
+        // if (a->targetFacing != _walkdata.destdir)
+        //     turnToDirection(_walkdata.destdir);
     } else {
-        if (a->moving & MF_LAST_LEG) {
-            a->moving = 0;
-            // startAnimActor(_standFrame);
-            // if (_targetFacing != _walkdata.destdir)
-            //     turnToDirection(_walkdata.destdir);
+        actor_setBox(a, a->curbox);
+        if (a->walkbox == a->destbox) {
+            foundX = a->destX;
+            foundY = a->destY;
+            a->moving |= MF_LAST_LEG;
         } else {
-            actor_setBox(a, a->curbox);
-            if (a->walkbox == a->destbox) {
-                foundX = a->destX;
-                foundY = a->destY;
+            next_box = boxes_getNext(a->walkbox, a->destbox);
+            if (next_box < 0) {
                 a->moving |= MF_LAST_LEG;
-            } else {
-                next_box = boxes_getNext(a->walkbox, a->destbox);
-                if (next_box < 0) {
-                    a->moving |= MF_LAST_LEG;
-                    return;
-                }
-
-                // Can't walk through locked boxes
-                // int flags = _vm->getBoxFlags(next_box);
-                // if ((flags & kBoxLocked) && !((flags & kBoxPlayerOnly) && !isPlayer())) {
-                //     a->moving |= MF_LAST_LEG;
-                // }
-
-                a->curbox = next_box;
-
-                uint8_t tx, ty;
-                box_getClosestPtOnBox(a->curbox, a->x, a->y, &tx, &ty);
-                box_getClosestPtOnBox(a->walkbox, tx, ty, &foundX, &foundY);
+                return;
             }
-            actor_calcMovementFactor(a, foundX, foundY);
-            actor_walkStep(a);
+
+            // Can't walk through locked boxes
+            // int flags = _vm->getBoxFlags(next_box);
+            // if ((flags & kBoxLocked) && !((flags & kBoxPlayerOnly) && !isPlayer())) {
+            //     a->moving |= MF_LAST_LEG;
+            // }
+
+            a->curbox = next_box;
+
+            uint8_t tx, ty;
+            box_getClosestPtOnBox(a->curbox, a->x, a->y, &tx, &ty);
+            box_getClosestPtOnBox(a->walkbox, tx, ty, &foundX, &foundY);
         }
+        actor_calcMovementFactor(a, foundX, foundY);
+        actor_walkStep(a);
     }
 }
 
@@ -208,12 +251,17 @@ uint8_t actor_isMoving(uint8_t actor)
 
 void actor_setCostume(uint8_t actor, uint8_t costume)
 {
-    DEBUG_PRINTF("Set actor %u costume %u\n", actor, costume);
+    //DEBUG_PRINTF("Set actor %u costume %u\n", actor, costume);
     actors[actor].costume = costume;
 
     // doesn't work on startup, fix it later
     //costume_updateAll();
 }
+
+// void actor_setTalkColor(uint8_t actor, uint8_t color)
+// {
+//     actors[actor].talkColor = color;
+// }
 
 void actor_stopTalk(void)
 {
@@ -223,17 +271,17 @@ void actor_stopTalk(void)
 
 void actor_talk(uint8_t actor, const uint8_t *s)
 {
-    // TODO: color
     // TODO: variables
 
     scummVars[VAR_HAVE_MSG] = 0xff;
 
-    message_print(s);
+    // TODO: switch the color when talking actor changes
+    message_print(s, defaultTalkColor/*actors[actor].talkColor*/);
 }
 
 void actor_setRoom(uint8_t actor, uint8_t room)
 {
-    DEBUG_PRINTF("Put actor %u in room %u\n", actor, room);
+    // DEBUG_PRINTF("Put actor %u in room %u\n", actor, room);
     actors[actor].room = room;
 
     costume_updateAll();
@@ -241,9 +289,10 @@ void actor_setRoom(uint8_t actor, uint8_t room)
 
 void actor_put(uint8_t actor, uint8_t x, uint8_t y)
 {
-    DEBUG_PRINTF("Put actor %u to %u, %u\n", actor, x, y);
+    // DEBUG_PRINTF("Put actor %u to %u, %u\n", actor, x, y);
     Actor *a = &actors[actor];
     a->moving = 0;
+    a->facing = 0;
     a->x = x;
     a->y = y;
     // if (_visible && _vm->_currentRoom != newRoom && _vm->getTalkingActor() == _number) {
@@ -260,7 +309,7 @@ void actor_put(uint8_t actor, uint8_t x, uint8_t y)
 
 void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)
 {
-    DEBUG_PRINTF("Walk actor %u to %u, %u\n", actor, x, y);
+    // DEBUG_PRINTF("Walk actor %u to %u, %u\n", actor, x, y);
 
     // TODO: jump to this room
 
@@ -275,7 +324,7 @@ void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)
     uint8_t xx = x;
     uint8_t yy = y;
     uint8_t box = boxes_adjustXY(&xx, &yy);
-    DEBUG_PRINTF("Dest box %u x=%u y=%u\n", box, xx, yy);
+    // DEBUG_PRINTF("Dest box %u x=%u y=%u\n", box, xx, yy);
 
 	// 	if (_pos.x == abr.x && _pos.y == abr.y && (dir == -1 || _facing == dir))
 	// 		return;
@@ -288,7 +337,7 @@ void actor_startWalk(uint8_t actor, uint8_t x, uint8_t y)
     actors[actor].moving = MF_NEW_LEG;
     actors[actor].destbox = box;
     actors[actor].curbox = actors[actor].walkbox;
-	// _walkdata.destdir = dir;
+    //actors[actor].destdir = dir;
 	// _walkdata.point3.x = 32000;
     //_moving = (_moving & ~(MF_LAST_LEG | MF_IN_LEG)) | MF_NEW_LEG;
 }
@@ -317,31 +366,44 @@ static void startAnimActor(uint8_t actor, uint8_t f)
     actors[actor].anim.curpos = 0;
 }
 
+static void actor_setDirection(uint8_t actor, uint8_t dir)
+{
+    DEBUG_PRINTF("Actor %d Set dir %d\n", actor, dir);
+    actors[actor].moving &= ~MF_TURN;
+    actors[actor].facing = dir;
+}
+
+static void actor_turnToDirection(uint8_t actor, uint8_t dir)
+{
+    DEBUG_PRINTF("Actor %d Turn dir %d\n", actor, dir);
+    actors[actor].moving = MF_TURN;
+    actors[actor].targetFacing = dir;
+}
 
 void actor_animate(uint8_t actor, uint8_t anim)
 {
     // TODO: different commands and directions from void Actor::animateActor(int anim)
 
     uint8_t cmd = anim / 4;
-    //dir = oldDirToNewDir(anim % 4);
+    uint8_t dir = anim % 4;
 
     // Convert into old cmd code
     cmd = 0x3F - cmd + 2;
 
+    DEBUG_PRINTF("Animate actor %d cmd=%d dir=%d\n", actor, cmd, dir);
+
 	switch (cmd) {
 	case 2:				// stop walking
-        DEBUG_PRINTF("TODO: Actor %u stop walking\n", actor);
+        //DEBUG_PRINTF("TODO: Actor %u stop walking\n", actor);
 		startAnimActor(actor, _standFrame);
+        actors[actor].moving = 0;
 		// stopActorMoving();
 		break;
 	case 3:				// change direction immediatly
-        DEBUG_PRINTF("TODO: Actor %u set direction\n", actor);
-		// _moving &= ~MF_TURN;
-		// setDirection(dir);
+	    actor_setDirection(actor, dir);
 		break;
 	case 4:				// turn to new direction
-        DEBUG_PRINTF("TODO: Actor %u turn to direction\n", actor);
-		// turnToDirection(dir);
+		actor_turnToDirection(actor, dir);
 		break;
 	case 64:
 	default:
@@ -412,6 +474,7 @@ void actors_show(void)
             actor_show(i);
         }
     }
+    costume_updateAll();
 }
 
 uint8_t actor_isInCurrentRoom(uint8_t actor)
@@ -430,4 +493,23 @@ void actor_walkToActor(uint8_t actor, uint8_t toActor, uint8_t dist)
 
     boxes_adjustXY(&x, &y);
 	actor_startWalk(actor, x, y);
+}
+
+uint8_t actor_getFromPos(uint8_t x, uint8_t y)
+{
+    uint8_t i;
+    for (i = 1 ; i < ACTOR_COUNT ; ++i)
+    {
+        Actor *a = &actors[i];
+        if (a->room == currentRoom && i != scummVars[VAR_EGO])
+        {
+            // TODO: actor width and height
+            if (x >= a->x && y >= a->y
+                && x < a->x + 2 && y < a->y + 4)
+            {
+                return i;
+            }
+        }
+    }
+    return 0;
 }

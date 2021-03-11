@@ -46,7 +46,7 @@ void camera_panTo(uint8_t x)
 
 void camera_followActor(uint8_t actor)
 {
-    DEBUG_PRINTF("Camera is following actor %u\n", actor);
+    // DEBUG_PRINTF("Camera is following actor %u\n", actor);
     cameraMode = kFollowActorCameraMode;
     cameraFollows = actor;
 

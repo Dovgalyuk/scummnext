@@ -4,9 +4,10 @@
 #include "actor.h"
 #include "room.h"
 #include "helper.h"
+#include "box.h"
 #include "debug.h"
 
-static uint8_t strcopy(char *d, const char *s)
+uint8_t strcopy(char *d, const char *s)
 {
     char *d0 = d;
     while (*d++ = *s++)
@@ -27,7 +28,7 @@ uint8_t getObjOrActorName(char *s, uint16_t id)
     //	if (objIsActor(obj))
     if (id < ACTOR_COUNT)
     {
-        DEBUG_PRINTF("Name for actor %d\n", id);
+        //DEBUG_PRINTF("Name for actor %d\n", id);
         return strcopy(s, actors[id].name);
     }
 
@@ -38,15 +39,7 @@ uint8_t getObjOrActorName(char *s, uint16_t id)
 	// 	}
 	// }
 
-    Object *obj = object_get(id);
-    if (!obj->OBCDoffset)
-        return 0;
-    DEBUG_PRINTF("Name for object %d\n", id);
-    HROOM r = openRoom(currentRoom);
-    seekToOffset(r, obj->OBCDoffset + obj->nameOffs);
-    uint8_t len = readString(r, s);
-    closeRoom(r);
-    return len;
+    return object_getName(s, id);
 }
 
 int8_t getObjectOrActorXY(uint16_t object, uint8_t *x, uint8_t *y)
@@ -71,17 +64,20 @@ int8_t getObjectOrActorXY(uint16_t object, uint8_t *x, uint8_t *y)
 	case WIO_NOT_FOUND:
 		return -1;
 	case WIO_INVENTORY:
-        // TODO
-
-		// if (objIsActor(_objectOwnerTable[object])) {
-		// 	act = derefActor(_objectOwnerTable[object], "getObjectOrActorXY(2)");
-		// 	if (act && act->isInCurrentRoom()) {
-		// 		x = act->getRealPos().x;
-		// 		y = act->getRealPos().y;
-		// 		return 0;
-		// 	}
-		// }
-		return -1;
+        {
+            uint8_t owner = object_getOwner(object);
+            if (owner && owner < ACTOR_COUNT)
+            {
+                Actor *act = &actors[owner];
+                if (act->room == currentRoom)
+                {
+                    *x = act->x;
+                    *y = act->y;
+                    return 0;
+                }
+            }
+            return -1;
+        }
 	default:
 		break;
 	}
@@ -103,17 +99,24 @@ uint16_t getObjActToObjActDist(uint16_t a, uint16_t b)
     }
 
 	if (getObjectOrActorXY(a, &x, &y) == -1)
+    {
+        //DEBUG_PRINTF("No XY for %d\n", a);
 		return 0xFF;
+    }
 
 	if (getObjectOrActorXY(b, &x2, &y2) == -1)
+    {
+        //DEBUG_PRINTF("No XY for %d\n", a);
 		return 0xFF;
+    }
 
-	// if (acta && !actb) {
-	// 	AdjustBoxResult r = acta->adjustXYToBeInBox(x2, y2);
-	// 	x2 = r.x;
-	// 	y2 = r.y;
-	// }
+    if (a < ACTOR_COUNT && b >= ACTOR_COUNT)
+    {
+        boxes_adjustXY(&x2, &y2);
+    }
 
 	// Now compute the distance between the two points
-	return getDist(x, y, x2, y2);
+	uint16_t res = getDist(x, y, x2, y2);
+    // DEBUG_PRINTF("Dist(%d,%d)-(%d,%d) = %d\n", x, y, x2, y2, res);
+    return res;
 }
