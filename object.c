@@ -7,26 +7,25 @@
 #include "graphics.h"
 #include "script.h"
 
-#define _numObjects (_numLocalObjects + _numInventory)
-
-extern Object objects[_numObjects];
+extern Object objects[_numLocalObjects];
 extern uint8_t objectOwnerTable[_numGlobalObjects];
 extern uint8_t objectStateTable[_numGlobalObjects];
 extern uint8_t inventoryOffset;
+extern Inventory invObjects[_numInventory];
 
-static Object *findLocalObjectSlot(void)
-{
-    Object *obj = objects;
-    Object *end = objects + _numObjects;
-    for ( ; obj != end ; ++obj)
-        if (!obj->obj_nr)
-        {
-            memset(obj, 0, sizeof(Object));
-            return obj;
-        }
-    DEBUG_PUTS("No more object slots available\n");
-    DEBUG_HALT;
-}
+// static Object *findLocalObjectSlot(void)
+// {
+//     Object *obj = objects;
+//     Object *end = objects + _numLocalObjects;
+//     for ( ; obj != end ; ++obj)
+//         if (!obj->obj_nr)
+//         {
+//             memset(obj, 0, sizeof(Object));
+//             return obj;
+//         }
+//     DEBUG_PUTS("No more object slots available\n");
+//     DEBUG_HALT;
+// }
 
 Object *object_get(uint16_t id)
 {
@@ -34,7 +33,7 @@ Object *object_get(uint16_t id)
         return NULL;
 
     Object *obj = objects;
-    Object *end = objects + _numObjects;
+    Object *end = objects + _numLocalObjects;
     for ( ; obj != end ; ++obj)
         if (obj->obj_nr == id)
             return obj;
@@ -46,9 +45,9 @@ void objects_clear(void)
 {
     // clean the objects
     Object *obj = objects;
-    Object *end = objects + _numObjects;
+    Object *end = objects + _numLocalObjects;
     for ( ; obj != end ; ++obj)
-        if (obj->whereis == WIO_ROOM && obj->room == currentRoom)
+        //if (obj->room == currentRoom)
             obj->obj_nr = 0;
 }
 
@@ -58,13 +57,17 @@ void setupRoomObjects(HROOM r)
     uint8_t numObj = readByte(r);
 
     uint16_t delta = numObj * 2;
+//#define MAX_ROOM_OBJ 32
+    //uint8_t offs[MAX_ROOM_OBJ];
 
-	for (uint8_t i = 0 ; i < numObj ; i++)
+    uint8_t i;
+	for (i = 1 ; i <= numObj ; i++)
     {
-        Object *od = findLocalObjectSlot();
-        seekToOffset(r, 28 + i * 2);
+        Object *od = &objects[i];//findLocalObjectSlot();
+        //offs[i] = od - objects;
+        seekToOffset(r, 28 + (i - 1) * 2);
         od->OBIMoffset = readWord(r);
-        esx_f_seek(r, delta - 2, ESX_SEEK_FWD);
+        seekFwd(r, delta - 2);
 		od->OBCDoffset = readWord(r);
         seekToOffset(r, od->OBCDoffset);
 
@@ -94,25 +97,25 @@ void setupRoomObjects(HROOM r)
         // TODO: fix name offset
         od->nameOffs = readByte(r); // 16 - name offset
 
-        od->whereis = WIO_ROOM;
-        od->room = currentRoom;
+        // od->whereis = WIO_ROOM;
+        // od->room = currentRoom;
 
         DEBUG_PRINTF("Load object %u x=%u y=%u walkx=%u walky=%u w=%u h=%u p=%u ps=%u actdir=%u prep=%u nameOffs=%u\n",
             od->obj_nr, od->x, od->y, od->walk_x, od->walk_y, od->width, od->height, od->parent,
             od->parentstate, od->actordir, od->preposition, od->nameOffs);
         DEBUG_PRINTF("-- OBIMOffset 0x%x OBCDOffset 0x%x\n", od->OBIMoffset, od->OBCDoffset);
         // list of events follows
-        uint8_t ev = readByte(r);
-        while (ev)
-        {
-            uint8_t offs = readByte(r);
-            // DEBUG_PRINTF("-- script for event 0x%x offs 0x%x\n", ev, offs);
-            ev = readByte(r);
-        }
+        // uint8_t ev = readByte(r);
+        // while (ev)
+        // {
+        //     uint8_t offs = readByte(r);
+        //     // DEBUG_PRINTF("-- script for event 0x%x offs 0x%x\n", ev, offs);
+        //     ev = readByte(r);
+        // }
 
         seekToOffset(r, od->OBCDoffset + od->nameOffs);
         DEBUG_PUTS("-- name: ");
-        ev = readByte(r);
+        uint8_t ev = readByte(r);
         while (ev)
         {
             DEBUG_PUTC(ev);
@@ -120,37 +123,57 @@ void setupRoomObjects(HROOM r)
         }
         DEBUG_PUTC('\n');
     }
+
+	// for (i = 0 ; i < numObj ; i++)
+    // {
+    //     uint8_t k = offs[i];
+    //     if (objects[k].parent)
+    //     {
+    //         objects[k].parent = offs[objects[k].parent - 1];
+    //     }
+    // }
 }
 
 Object *object_find(uint16_t x, uint16_t y)
 {
     // convert y to tiles, because objects have tile coordinates
     y = y / (8 / V12_Y_MULTIPLIER);
-	// const int mask = (_game.version <= 2) ? kObjectState_08 : 0xF;
     Object *obj = objects;
-    Object *end = objects + _numObjects;
+    Object *end = objects + _numLocalObjects;
 	for ( ; obj != end ; ++obj) {
-        if (obj->obj_nr == 0)
+        if (obj->obj_nr == 0/* || obj->whereis != WIO_ROOM*/)
             continue;
 
-        if (object_getState(obj->obj_nr) & kObjectStateUntouchable)
+        if (objectStateTable[obj->obj_nr] & kObjectStateUntouchable)
             continue;
 
-        if (obj->x <= x && obj->x + obj->width > x
-            && obj->y <= y && obj->y + obj->height > y)
-            return obj;
+        // if (obj->x <= x && obj->x + obj->width > x
+        //     && obj->y <= y && obj->y + obj->height > y)
+        // {
+        //     DEBUG_PRINTF("Can find object %d parent %d\n", obj->obj_nr, obj->parent);
+        // }
+        //     return obj;
 
-		// b = i;
-		// do {
-		// 	a = _objs[b].parentstate;
-		// 	b = _objs[b].parent;
-		// 	if (b == 0) {
-		// 		if (_objs[i].x_pos <= x && _objs[i].width + _objs[i].x_pos > x &&
-		// 		    _objs[i].y_pos <= y && _objs[i].height + _objs[i].y_pos > y)
-		// 			return _objs[i].obj_nr;
-		// 		break;
-		// 	}
-		// } while ((_objs[b].state & mask) == a);
+        Object *b = obj;
+        uint8_t a;
+        do
+        {
+            a = b->parentstate;
+            // if (obj->x <= x && obj->x + obj->width > x
+            //     && obj->y <= y && obj->y + obj->height > y)
+            //     DEBUG_PRINTF("Testing obj %d parent %d\n", b->obj_nr, b->parent);
+            if (b->parent == 0)
+            {
+                if (obj->x <= x && obj->x + obj->width > x
+                    && obj->y <= y && obj->y + obj->height > y)
+                {
+                    return obj;
+                }
+                break;
+            }
+            b = &objects[b->parent];
+        }
+        while ((objectStateTable[b->obj_nr] & kObjectState_08) == a);
 	}
 
     return NULL;
@@ -188,6 +211,12 @@ int8_t object_whereIs(uint16_t id)
 	if (id < 1)
 		return WIO_NOT_FOUND;
 
+    // check inventory
+    uint8_t i;
+    for (i = 0 ; i < _numInventory ; i++)
+        if (invObjects[i].obj_nr == id)
+            return WIO_INVENTORY;
+
     Object *obj = object_get(id);
     if (obj)
     {
@@ -201,7 +230,7 @@ int8_t object_whereIs(uint16_t id)
 
         // if (_objs[i].fl_object_index)
         // 	return WIO_FLOBJECT;
-        return obj->whereis;// WIO_ROOM;
+        return WIO_ROOM;
     }
 
 	return WIO_NOT_FOUND;
@@ -256,6 +285,7 @@ uint8_t object_getState(uint16_t id)
 
 void object_setState(uint16_t id, uint8_t s)
 {
+    //DEBUG_PRINTF("Set state %d %x\n", id, s); 
     objectStateTable[id] = s;
 }
 
@@ -271,60 +301,97 @@ void object_getXY(uint16_t id, uint8_t *x, uint8_t *y)
 
 void objects_redraw(void)
 {
+    //DEBUG_PUTS("Redraw all\n");
     // clear screen
     HROOM r = openRoom(currentRoom);
     decodeRoomBackground(r);
     closeRoom(r);
 
-    Object *obj = objects;
-    Object *end = objects + _numObjects;
-    for ( ; obj != end ; ++obj)
+    // Object *obj = objects;
+    // Object *end = objects + _numObjects;
+    // for ( ; obj != end ; ++obj)
+    // {
+    int i;
+    for (i = _numLocalObjects - 1 ; i >= 0 ; --i)
+    {
+        Object *obj = &objects[i];
         if (obj->obj_nr
             && (objectStateTable[obj->obj_nr] & kObjectState_08)
-            && obj->whereis == WIO_ROOM)
+            /*&& obj->whereis == WIO_ROOM*/
+            //&& obj->room == currentRoom
             // TODO: check room
+            )
         {
-            graphics_drawObject(obj);
+            Object *od = obj;
+            uint8_t a;
+            do {
+                a = od->parentstate;
+                if (!od->parent)
+                {
+                    graphics_drawObject(obj);
+                    //DEBUG_PRINTF("--- obj %d\n", obj->obj_nr);
+                    break;
+                }
+                od = &objects[od->parent];
+            } while ((objectStateTable[od->obj_nr] & kObjectState_08) == a);
         }
+    }
 }
 
-uint8_t object_getName(char *s, uint16_t id)
+static uint8_t readName(char *s, uint8_t room, uint16_t obcd, uint8_t offs)
 {
-    Object *obj = object_get(id);
-    if (!obj->OBCDoffset)
+    if (!obcd)
         return 0;
     //DEBUG_PRINTF("Name for object %d\n", id);
-    HROOM r = openRoom(obj->room);
-    seekToOffset(r, obj->OBCDoffset + obj->nameOffs);
+    HROOM r = openRoom(room);
+    seekToOffset(r, obcd + offs);
     uint8_t len = readString(r, s);
     closeRoom(r);
     return len;
 }
 
+uint8_t object_getName(char *s, uint16_t id)
+{
+    Object *obj = object_get(id);
+    return readName(s, currentRoom, obj->OBCDoffset, obj->nameOffs);
+}
+
 uint8_t inventory_getCount(uint8_t owner)
 {
-	// uint8_t i;
-    // uint16_t obj;
+	uint8_t i;
+    uint16_t obj;
 	uint8_t count = 0;
-	// for (i = 0; i < _numInventory; i++) {
-	// 	obj = inventory[i];
-	// 	if (obj && object_getOwner(obj) == owner)
-	// 		count++;
-	// }
+	for (i = 0; i < _numInventory; i++) {
+		obj = invObjects[i].obj_nr;
+		if (obj && objectOwnerTable[obj] == owner)
+			count++;
+	}
 	return count;
 }
 
-uint16_t inventory_find(uint8_t owner, uint8_t idx)
+static uint8_t inventory_getSlot(void)
 {
-	// uint8_t count = 1, i;
-    // uint16_t obj;
-	// for (i = 0; i < _numInventory; i++) {
-	// 	obj = inventory[i];
-	// 	if (obj && object_getOwner(obj) == owner && count++ == idx)
-	// 		return obj;
-	// }
-	return 0;
+	uint8_t i;
+	uint8_t count = 0;
+	for (i = 0; i < _numInventory; i++) {
+		if (!invObjects[i].obj_nr)
+            return i;
+	}
+    /* Should never happen */
+    return 0;
 }
+
+// uint16_t inventory_find(uint8_t owner, uint8_t idx)
+// {
+// 	// uint8_t count = 1, i;
+//     // uint16_t obj;
+// 	// for (i = 0; i < _numInventory; i++) {
+// 	// 	obj = inventory[i];
+// 	// 	if (obj && object_getOwner(obj) == owner && count++ == idx)
+// 	// 		return obj;
+// 	// }
+// 	return 0;
+// }
 
 void inventory_redraw(void)
 {
@@ -340,16 +407,18 @@ void inventory_redraw(void)
 	// if (max_inv > 4)
 	// 	max_inv = 4;
     uint8_t count = 0;
-    Object *obj = objects;
-    Object *end = objects + _numObjects;
+    // Object *obj = objects;
+    // Object *end = objects + _numObjects;
+    Inventory *obj = invObjects;
+    Inventory *end = invObjects + _numInventory;
     for ( ; obj != end ; ++obj)
     {
-		if (obj->obj_nr == 0 || obj->whereis != WIO_INVENTORY
-            || object_getOwner(obj->obj_nr) != scummVars[VAR_EGO])
+		if (obj->obj_nr == 0// || obj->whereis != WIO_INVENTORY
+            || objectOwnerTable[obj->obj_nr] != scummVars[VAR_EGO])
 			continue;
 
         char name[32];
-        object_getName(name, obj->obj_nr);
+        readName(name, obj->room, obj->OBCDoffset, obj->nameOffs);
         graphics_drawInventory(count, name);
         ++count;
 
@@ -419,13 +488,17 @@ void inventory_addObject(Object *obj, uint8_t room)
 	// 	ptr = foir.obcd;
 	// }
 
-	//uint8_t slot = getInventorySlot();
+	uint8_t slot = inventory_getSlot();
+    invObjects[slot].obj_nr = obj->obj_nr;
+    invObjects[slot].room = currentRoom;
+    invObjects[slot].OBCDoffset = obj->OBCDoffset;
+    invObjects[slot].nameOffs = obj->nameOffs;
 	//inventory[slot] = obj->obj_nr;
 	// dst = _res->createResource(rtInventory, slot, size);
 	// assert(dst);
 	// memcpy(dst, ptr, size);
 
-    obj->whereis = WIO_INVENTORY;
+    //obj->whereis = WIO_INVENTORY;
 }
 
 uint16_t inventory_checkXY(int8_t x, int8_t y)
@@ -440,13 +513,12 @@ uint16_t inventory_checkXY(int8_t x, int8_t y)
 
     uint8_t slot = x + y * INV_COLS;
     uint8_t count = 0;
-    Object *obj = objects;
-    Object *end = objects + _numObjects;
-
+    Inventory *obj = invObjects;
+    Inventory *end = invObjects + _numInventory;
     for ( ; obj != end ; ++obj)
     {
-		if (obj->obj_nr == 0 || obj->whereis != WIO_INVENTORY
-            || object_getOwner(obj->obj_nr) != scummVars[VAR_EGO])
+		if (obj->obj_nr == 0
+            || objectOwnerTable[obj->obj_nr] != scummVars[VAR_EGO])
 			continue;
 
         if (slot == count)

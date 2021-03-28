@@ -5,5 +5,6 @@
 
 void costume_loadData(void);
 void costume_updateAll(void);
+void costume_updateActor(Actor *act);
 
 #endif

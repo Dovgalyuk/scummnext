@@ -13,9 +13,8 @@
 #include "engine.h"
 #include "box.h"
 #include "string.h"
-#include "inventory.h"
 
-#define MAX_SCRIPTS 12
+#define MAX_SCRIPTS 16
 
 enum {
     PARAM_1 = 0x80,
@@ -268,12 +267,12 @@ static void parseString(uint8_t actor)
 		// 	}
 		// } else
 		// *ptr++ = c;
-        DEBUG_PUTC(c);
+        //DEBUG_PUTC(c);
         *ptr++ = c;
 
 		if (insertSpace)
         {
-            DEBUG_PUTC(' ');
+            //DEBUG_PUTC(' ');
 			*ptr++ = ' ';
         }
 
@@ -375,6 +374,7 @@ static void op_getActorRoom(void)
 {
 	getResultPos();
 	uint8_t act = getVarOrDirectByte(PARAM_1);
+    //DEBUG_PRINTF("Get actor %u room %u\n", act, actors[act].room);
 	setResult(actors[act].room);
 }
 
@@ -475,24 +475,23 @@ static void op_getClosestObjActor(void)
 static void op_setState08(void)
 {
  	uint16_t j = getVarOrDirectWord(PARAM_1);
-    Object *obj = object_get(j);
-    //DEBUG_ASSERT(obj, "op_setState08");
     //DEBUG_PRINTF("setState08 %u\n", j);
 
     object_setState(j, object_getState(j) | kObjectState_08);
 	// markObjectRectAsDirty(obj);
 	// clearDrawObjectQueue();
 
+    Object *obj = object_get(j);
     if (obj)
     {
-	    graphics_drawObject(obj);
+        objects_redraw();
+	    //graphics_drawObject(obj);
     }
 }
 
 static void op_clearState08(void)
 {
     uint16_t j = getActiveObject();
-    //Object *obj = object_get(j);
     //DEBUG_PRINTF("clearState08 %u\n", j);
 
     object_setState(j, object_getState(j) & ~kObjectState_08);
@@ -683,9 +682,9 @@ static void op_actorFromPos(void)
 static void op_print(void)
 {
     uint8_t act = getVarOrDirectByte(PARAM_1);
-    DEBUG_PRINTF("print(%u, ", act);
+    //DEBUG_PRINTF("print(%u, ", act);
     parseString(act);
-    DEBUG_PUTS(")\n");
+    //DEBUG_PUTS(")\n");
 }
 
 static void op_putActorAtObject(void)
@@ -713,9 +712,9 @@ static void op_ifNotState08(void)
 static void op_printEgo(void)
 {
     uint8_t act = scummVars[VAR_EGO];
-    DEBUG_PRINTF("print(%u, ", act);
+    //DEBUG_PRINTF("print(%u, ", act);
     parseString(act);
-    DEBUG_PUTS(")\n");
+    //DEBUG_PUTS(")\n");
 }
 
 static void op_getRandomNr(void)
@@ -941,6 +940,8 @@ static void op_startScript(void)
     // }
     DEBUG_PRINTF("Start script with id %u\n", script);
     pushScript(script, scripts[script].room, scripts[script].roomoffs, 4);
+    // exit from current script to run newly started
+    exitFlag = 1;
 }
 
 static void op_getActorX(void)
@@ -1094,6 +1095,8 @@ static void op_loadRoomWithEgo(void)
 	uint8_t room = getVarOrDirectByte(PARAM_2);
     uint8_t ego = scummVars[VAR_EGO];
 
+    DEBUG_PRINTF("Load room %u with ego %u from script %u\n", room, ego, script_id);
+
 	// a = derefActor(VAR(VAR_EGO), "o2_loadRoomWithEgo");
 
 	// // The original interpreter sets the actors new room X/Y to the last rooms X/Y
@@ -1182,7 +1185,7 @@ static void op_lights(void)
 static void op_loadRoom(void)
 {
     uint8_t room = getVarOrDirectByte(PARAM_1);
-    DEBUG_PRINTF("loadRoom %u\n", room);
+    DEBUG_PRINTF("loadRoom %u from script %u\n", room, script_id);
 
     startScene(room);
     // _fullRedraw = true;
@@ -1226,7 +1229,7 @@ static void op_endCutscene(void)
 	// // Reset user state to values before cutscene
 	// setUserState(vm.cutSceneData[0] | USERSTATE_SET_IFACE | USERSTATE_SET_CURSOR | USERSTATE_SET_FREEZE);
 
-    //actorFollowCamera(VAR(VAR_EGO));
+    camera_followActor(scummVars[VAR_EGO]);
 }
 
 static void op_findObject(void)
@@ -1313,7 +1316,7 @@ static void op_drawSentence(void)
 	}
 
     if (scummVars[VAR_SENTENCE_OBJECT2] > 0) {
-        uint8_t len = getObjOrActorName(s + 1, scummVars[VAR_SENTENCE_OBJECT1]);
+        uint8_t len = getObjOrActorName(s + 1, scummVars[VAR_SENTENCE_OBJECT2]);
         if (len)
         {
             *s++ = ' ';
@@ -1601,7 +1604,7 @@ static OpcodeFunc opcodes[0x100] = {
 	//[0x63] = op_getActorFacing,
 	[0x64] = op_loadRoomWithEgo,
 	[0x65] = op_drawObject,
-	//[0x66] = op_getClosestObjActor,
+	[0x66] = op_getClosestObjActor,
 	[0x67] = op_clearState04,
     [0x68] = op_isScriptRunning,
     [0x69] = op_setOwnerOf,
@@ -1662,7 +1665,7 @@ static OpcodeFunc opcodes[0x100] = {
     [0xa0] = op_stopObjectCode,
 	[0xa1] = op_putActor,
 	//[0xa2] = o4_saveLoadGame,
-	//[0xa3] = op_getActorY,
+	[0xa3] = op_getActorY,
 	[0xa4] = op_loadRoomWithEgo,
 	[0xa5] = op_drawObject,
 	[0xa6] = op_setVarRange,
@@ -1730,7 +1733,7 @@ static OpcodeFunc opcodes[0x100] = {
 	[0xe4] = op_loadRoomWithEgo,
 	[0xe5] = op_drawObject,
 	[0xe6] = op_getClosestObjActor,
-	//[0xe7] = op_clearState04,
+	[0xe7] = op_clearState04,
 	[0xe8] = op_isScriptRunning,
 	[0xe9] = op_setOwnerOf,
 	//[0xea] = op_subIndirect,

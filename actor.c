@@ -9,9 +9,10 @@
 #include "script.h"
 #include "string.h"
 
-#define _standFrame    1
-#define _initFrame     2
-#define _talkStopFrame 4
+#define _standFrame     1
+#define _initFrame      2
+#define _talkStopFrame  4
+#define _talkStartFrame 5
 
 Actor actors[ACTOR_COUNT];
 
@@ -24,6 +25,7 @@ enum MoveFlags {
 };
 
 uint8_t defaultTalkColor;
+static uint8_t talkingActor;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Actor internals
@@ -184,7 +186,7 @@ static void actor_walk(Actor *a)
         {
             a->facing = a->targetFacing;
             a->moving &= ~MF_TURN;
-            costume_updateAll();
+            costume_updateActor(a);
         }
         else
         {
@@ -235,6 +237,32 @@ static void actor_walk(Actor *a)
     }
 }
 
+static void startAnimActor(uint8_t actor, uint8_t f)
+{
+    // TODO
+    //DEBUG_PRINTF("Actor %u start anim %u\n", actor, f);
+    // then void Actor::startAnimActor(int f = anim/4)
+    // _animProgress = 0;
+    // _needRedraw = true;
+    // _cost.animCounter = 0;
+    actors[actor].frame = f;
+    actors[actor].curpos = 0;
+}
+
+static void actor_setDirection(uint8_t actor, uint8_t dir)
+{
+    DEBUG_PRINTF("Actor %d Set dir %d\n", actor, dir);
+    actors[actor].moving &= ~MF_TURN;
+    actors[actor].facing = dir;
+}
+
+static void actor_turnToDirection(uint8_t actor, uint8_t dir)
+{
+    DEBUG_PRINTF("Actor %d Turn dir %d\n", actor, dir);
+    actors[actor].moving = MF_TURN;
+    actors[actor].targetFacing = dir;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Actor interface
 ///////////////////////////////////////////////////////////////////////////////
@@ -267,6 +295,12 @@ void actor_stopTalk(void)
 {
     scummVars[VAR_HAVE_MSG] = 0;
     talkDelay = 0;
+
+    if (talkingActor < ACTOR_COUNT)
+    {
+        actor_animate(talkingActor, _talkStopFrame * 4);
+        talkingActor = 255;
+    }
 }
 
 void actor_talk(uint8_t actor, const uint8_t *s)
@@ -274,9 +308,13 @@ void actor_talk(uint8_t actor, const uint8_t *s)
     // TODO: variables
 
     scummVars[VAR_HAVE_MSG] = 0xff;
+    talkingActor = actor;
 
     // TODO: switch the color when talking actor changes
     message_print(s, defaultTalkColor/*actors[actor].talkColor*/);
+
+    if (actor < ACTOR_COUNT)
+        actor_animate(actor, _talkStartFrame * 4);
 }
 
 void actor_setRoom(uint8_t actor, uint8_t room)
@@ -354,32 +392,6 @@ void actors_walk(void)
     }
 }
 
-static void startAnimActor(uint8_t actor, uint8_t f)
-{
-    // TODO
-
-    // then void Actor::startAnimActor(int f = anim/4)
-    // _animProgress = 0;
-    // _needRedraw = true;
-    // _cost.animCounter = 0;
-    actors[actor].frame = f;
-    actors[actor].anim.curpos = 0;
-}
-
-static void actor_setDirection(uint8_t actor, uint8_t dir)
-{
-    DEBUG_PRINTF("Actor %d Set dir %d\n", actor, dir);
-    actors[actor].moving &= ~MF_TURN;
-    actors[actor].facing = dir;
-}
-
-static void actor_turnToDirection(uint8_t actor, uint8_t dir)
-{
-    DEBUG_PRINTF("Actor %d Turn dir %d\n", actor, dir);
-    actors[actor].moving = MF_TURN;
-    actors[actor].targetFacing = dir;
-}
-
 void actor_animate(uint8_t actor, uint8_t anim)
 {
     // TODO: different commands and directions from void Actor::animateActor(int anim)
@@ -411,7 +423,7 @@ void actor_animate(uint8_t actor, uint8_t anim)
         break;
     }
 
-    costume_updateAll();
+    costume_updateActor(&actors[actor]);
 }
 
 void actors_animate(void)
@@ -422,9 +434,15 @@ void actors_animate(void)
         // TODO: any other flags?
         if (actor_isInCurrentRoom(i))
         {
-            ++actors[i].anim.curpos;
-            if (actors[i].anim.curpos >= actors[i].anim.frames)
-                actors[i].anim.curpos = 0;
+            uint8_t p = actors[i].curpos++;
+            if (actors[i].curpos >= actors[i].frames)
+            {
+                actors[i].curpos = 0;
+            }
+            if (p != actors[i].curpos)
+            {
+                costume_updateActor(&actors[i]);
+            }
         }
     }
 }

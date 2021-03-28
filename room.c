@@ -69,6 +69,8 @@ static void setupRoomSubBlocks(void)
     setupRoomObjects(r);
 
     closeRoom(r);
+
+    objects_redraw();
 }
 
 void startScene(uint8_t room/*, Actor *a, int objectNr*/)
@@ -78,6 +80,7 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 	// debugC(DEBUG_GENERAL, "Loading room %d", room);
 
 	actor_stopTalk();
+    graphics_clearScreen();
 
 	// fadeOut(_switchRoomEffect2);
 	// _newEffect = _switchRoomEffect;

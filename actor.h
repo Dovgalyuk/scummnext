@@ -3,16 +3,7 @@
 
 #include <stdint.h>
 
-#define MAX_FRAMES 4
-
-typedef struct Animation {
-    uint8_t frames;
-    uint8_t anchors[MAX_FRAMES];
-    uint8_t curpos;
-    // anchor sprite of the current view
-    uint8_t anchor;
-    int8_t ax, ay;
-} Animation;
+//#define MAX_FRAMES 8
 
 typedef struct Actor
 {
@@ -43,7 +34,13 @@ typedef struct Actor
     // costume frame
     uint8_t frame;
     // animation of the frame
-    Animation anim;
+    uint8_t frames;
+    //uint8_t anchors[MAX_FRAMES];
+    uint8_t curpos;
+    // anchor sprite of the current view
+    uint8_t anchor;
+    uint8_t old_anchor;
+    int8_t ax, ay;
 } Actor;
 
 #define ACTOR_COUNT 25

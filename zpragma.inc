@@ -6,8 +6,9 @@
 #pragma output CRT_ORG_PAGE_2 = 0x0000
 #pragma output CRT_ORG_PAGE_3 = 0x0000
 #pragma output CRT_ORG_PAGE_32 = 0x2000
-#pragma output CRT_ORG_PAGE_44 = 0x0000
-#pragma output CRT_ORG_PAGE_45 = 0x2000
+#pragma output CRT_ORG_PAGE_48 = 0x0000
+#pragma output CRT_ORG_PAGE_49 = 0x2000
+#pragma output CRT_ORG_PAGE_50 = 0x0000
 
 // stack location
 

@@ -44,12 +44,21 @@ typedef struct Object
     uint8_t parent;
     uint8_t parentstate;
     uint8_t preposition;
-    uint8_t room;
-    uint8_t whereis;
+    //uint8_t room;
+    //uint8_t whereis;
     uint8_t nameOffs;
     uint16_t OBIMoffset;
     uint16_t OBCDoffset;
 } Object;
+
+typedef struct Inventory
+{
+    uint16_t obj_nr;
+    uint8_t preposition;
+    uint8_t room;
+    uint8_t nameOffs;
+    uint16_t OBCDoffset;
+} Inventory;
 
 Object *object_get(uint16_t id);
 Object *object_find(uint16_t x, uint16_t y);

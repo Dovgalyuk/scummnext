@@ -8,14 +8,16 @@
 #include "verbs.h"
 #include "sprites.h"
 #include "string.h"
+#include "helper.h"
 
 #define PAL_SPRITES 0x20
 #define PAL_TILES   0x30
 
-static uint8_t translationTable[256];
+#define GRAPH_PAGE 50
+extern uint8_t nametable[16][64];
+extern uint8_t attributes[64];
+extern uint8_t translationTable[256];
 
-static uint8_t nametable[16][64];
-static uint8_t attributes[64];
 // costume set
 uint8_t costdesc[51];
 uint8_t costlens[279];
@@ -66,14 +68,6 @@ static const uint8_t tableNESPalette[] = {
     RGB2NEXT(0x92, 0xFF, 0x6D), RGB2NEXT(0x49, 0xFF, 0xDB),
     RGB2NEXT(0x92, 0xDB, 0xFF), RGB2NEXT(0x92, 0x92, 0x92),
     RGB2NEXT(0x00, 0x00, 0x00), RGB2NEXT(0x00, 0x00, 0x00)
-};
-
-const uint8_t v1MMNESLookup[25] = {
-	0x00, 0x03, 0x01, 0x06, 0x08,
-	0x02, 0x00, 0x07, 0x0C, 0x04,
-	0x09, 0x0A, 0x12, 0x0B, 0x14,
-	0x0D, 0x11, 0x0F, 0x0E, 0x10,
-	0x17, 0x00, 0x01, 0x05, 0x16
 };
 
 __sfr __at 0xfe IO_FE;
@@ -159,12 +153,16 @@ void initGraphics(void)
 
 void decodeNESTrTable(void)
 {
+    PUSH_PAGE(0, GRAPH_PAGE);
+
     HROOM r = seekResource(&costumes[77]);
     uint8_t size = readWord(r);
     //DEBUG_PRINTF("NES translation table size %u\n", size);
     for (uint8_t i = 0 ; i < size - 2 ; ++i)
         translationTable[i + ' '] = readByte(r);
     closeRoom(r);
+
+    POP_PAGE(0);
 }
 
 
@@ -199,6 +197,8 @@ static void updatePalette(HROOM r, uint8_t id)
 
 void decodeRoomBackground(HROOM r)
 {
+    PUSH_PAGE(0, GRAPH_PAGE);
+
     esx_f_seek(r, 0xa, ESX_SEEK_SET);
     uint16_t gdata = readWord(r);
     // 17 = tileset_id + palette
@@ -246,6 +246,8 @@ void decodeRoomBackground(HROOM r)
         data = next;
 	}
     // decode masktable
+
+    POP_PAGE(0);
 }
 
 void decodeNESGfx(HROOM r)
@@ -305,20 +307,28 @@ void graphics_loadCostumeSet(uint8_t n)
 
 static void decodeNESObject(Object *obj)
 {
+    uint8_t w = obj->width;
+    uint8_t h = obj->height;
+    uint8_t oy = obj->y;
+    uint8_t ox = obj->x;
+
+    //DEBUG_PRINTF("--- decode object ox=%u oy=%u w=%u h=%u\n", ox, oy, w, h);
+
     HROOM r = openRoom(currentRoom);
     esx_f_seek(r, obj->OBIMoffset, ESX_SEEK_SET);
 
+    PUSH_PAGE(0, GRAPH_PAGE);
     uint8_t len = readByte(r);
-    for (uint8_t y = 0 ; y < obj->height ; ++y)
+    for (uint8_t y = 0 ; y < h ; ++y)
     {
-        uint8_t next = readByte(r);
         uint8_t x = 0;
-        while (x < obj->width)
+        while (x < w)
         {
+            uint8_t next = readByte(r);
             for (uint8_t i = 0 ; i < (len & 0x7f) ; ++i)
             {
-                //DEBUG_PRINTF("%x ", next);
-                nametable[obj->y + y][x + obj->x + 2] = next;
+                // DEBUG_PRINTF("%x ", next);
+                nametable[oy + y][x + ox + 2] = next;
                 if (len & 0x80)
                     next = readByte(r);
                 ++x;
@@ -327,18 +337,18 @@ static void decodeNESObject(Object *obj)
                 next = readByte(r);
             len = next;
         }
-        //DEBUG_PUTS("\n");
+        // DEBUG_PUTS("\n");
     }
 
-	// decode attribute update data
-	uint8_t y = obj->height / 2;
-	uint8_t ay = obj->y;
+    // decode attribute update data
+    uint8_t y = h / 2;
+    uint8_t ay = oy;
 	while (y)
     {
-		uint8_t ax = obj->x + 2;
+		uint8_t ax = ox + 2;
 		uint8_t x = 0;
 		uint8_t adata = 0;
-		while (x < (obj->width >> 1))
+		while (x < (w >> 1))
         {
 			if (!(x & 3))
 				adata = readByte(r);
@@ -390,6 +400,8 @@ static void decodeNESObject(Object *obj)
 	// }
 
     closeRoom(r);
+
+    POP_PAGE(0);
 }
 
 static void clearLine(uint8_t y)
@@ -407,13 +419,15 @@ static void clearLine(uint8_t y)
 
 static void clearTalkArea(void)
 {
-    int i;
+    uint8_t i;
     for (i = 0 ; i < SCREEN_TOP ; ++i)
         clearLine(i);
 }
 
 static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap, uint8_t color)
 {
+    PUSH_PAGE(0, GRAPH_PAGE);
+
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + x * TILE_BYTES + y * LINE_BYTES;
     while (*s)
     {
@@ -456,6 +470,8 @@ static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap, uint8
             screen += 2 * gap * TILE_BYTES;
         }
     }
+
+    POP_PAGE(0);
 }
 
 void graphics_print(const char *s, uint8_t c)
@@ -486,9 +502,21 @@ void graphics_drawInventory(uint8_t slot, const char *s)
         INV_TOP + slot / INV_COLS, INV_GAP, 3);
 }
 
+void graphics_clearScreen(void)
+{
+    uint8_t i;
+    for (i = 0 ; i < SCREEN_TOP + SCREEN_HEIGHT ; ++i)
+        clearLine(i);
+}
+
 void graphics_updateScreen(void)
 {
-    uint8_t i, j;
+    PUSH_PAGE(0, GRAPH_PAGE);
+
+    //DEBUG_PRINTF("Draw nametable %x\n", nametable[15][2]);
+
+    uint8_t i, j, x, y;
+    uint16_t xx;
     // update message area
     if (talkDelay)
     {
@@ -511,17 +539,18 @@ void graphics_updateScreen(void)
     }
     offs = camera_getVirtScreenX();
 
-    // TODO: clear the border
-
     uint8_t bytegap = gap * 2;
     //DEBUG_PRINTF("cameraX=%u roomWidth=%u offs=%u gap=%u\n", cameraX, roomWidth, offs, gap);
+    // DEBUG_PRINTF("Screen bytes %x %x\n",
+    //     nametable[SCREEN_HEIGHT - 1][2],
+    //     nametable[SCREEN_HEIGHT - 1][offs + 2]);
     for (i = 0 ; i < SCREEN_HEIGHT ; ++i)
     {
         screen += bytegap;
         for (j = 0 ; j < width ; ++j)
         {
-            uint8_t x = j + offs + 2;
-            uint8_t y = i;
+            x = j + offs + 2;
+            y = i;
             uint8_t attr = (attributes[((y << 2) & 0x30) | ((x >> 2) & 0xF)]
                 >> (((y & 2) << 1) | (x & 2))) & 0x3;
             /* 2 empty cells at the beginning */
@@ -534,38 +563,48 @@ void graphics_updateScreen(void)
     // draw actors
     for (i = 0 ; i < ACTOR_COUNT ; ++i)
     {
-        if (actors[i].room == currentRoom)
+        Actor *act = &actors[i];
+        if (act->room == currentRoom)
         {
-            Animation *anim = &actors[i].anim;
-            int16_t x = actors[i].x * V12_X_MULTIPLIER + anim->ax - offs * 8;
-            uint8_t f;
-            for (f = 0 ; f < anim->frames ; ++f)
+            xx = act->x * V12_X_MULTIPLIER + act->ax - offs * 8;
+            if (act->old_anchor)
             {
-                uint8_t anchor = anim->anchors[f];
-                IO_SPRITE_SLOT = anchor;
-                if (f != anim->curpos || x < 0 || x > SCREEN_WIDTH * 8)
-                {
-                    IO_SPRITE_ATTRIBUTE = 0;
-                    IO_SPRITE_ATTRIBUTE = 0;
-                    IO_SPRITE_ATTRIBUTE = 0;
-                    // invisible
-                    IO_SPRITE_ATTRIBUTE = 0x40 | anchor;
-                    IO_SPRITE_ATTRIBUTE = 0x80;
-                    continue;
-                }
-                x += gap * 8;
-                uint8_t y = actors[i].y * V12_Y_MULTIPLIER + anim->ay + SCREEN_TOP * 8;
-                IO_SPRITE_ATTRIBUTE = x;
-                IO_SPRITE_ATTRIBUTE = y;
-                IO_SPRITE_ATTRIBUTE = (x >> 8) & 1;
-                IO_SPRITE_ATTRIBUTE = 0xc0 | anchor;
+                // switch old sprite off
+                IO_SPRITE_SLOT = act->old_anchor;
+                IO_SPRITE_ATTRIBUTE = 0;
+                IO_SPRITE_ATTRIBUTE = 0;
+                IO_SPRITE_ATTRIBUTE = 0;
+                // invisible
+                IO_SPRITE_ATTRIBUTE = 0x40;
                 IO_SPRITE_ATTRIBUTE = 0x80;
-                //DEBUG_PRINTF("Actor %u x=%u/%u y=%u/%u\n", i, actors[i].x, x, actors[i].y, y);
+                act->old_anchor = 0;
             }
+            uint8_t anchor = act->anchor;
+            IO_SPRITE_SLOT = anchor;
+            if (xx < 0 || xx > SCREEN_WIDTH * 8)
+            {
+                IO_SPRITE_ATTRIBUTE = 0;
+                IO_SPRITE_ATTRIBUTE = 0;
+                IO_SPRITE_ATTRIBUTE = 0;
+                // invisible
+                IO_SPRITE_ATTRIBUTE = 0x40 | anchor;
+                IO_SPRITE_ATTRIBUTE = 0x80;
+                continue;
+            }
+            xx += gap * 8;
+            y = act->y * V12_Y_MULTIPLIER + act->ay + SCREEN_TOP * 8;
+            IO_SPRITE_ATTRIBUTE = xx;
+            IO_SPRITE_ATTRIBUTE = y;
+            IO_SPRITE_ATTRIBUTE = (xx >> 8) & 1;
+            IO_SPRITE_ATTRIBUTE = 0xc0 | anchor;
+            IO_SPRITE_ATTRIBUTE = 0x80;
+            //DEBUG_PRINTF("Actor %u x=%u/%u y=%u/%u\n", i, actors[i].x, x, actors[i].y, y);
             //graphics_drawActor(actors + i);
             //a->animateCostume();
         }
     }
+
+    POP_PAGE(0);
 }
 
 void graphics_drawObject(Object *obj)

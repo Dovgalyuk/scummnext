@@ -5,28 +5,58 @@
 #include "graphics.h"
 #include "room.h"
 #include "sprites.h"
+#include "helper.h"
 #include "debug.h"
+
+#define COST_PAGE0 48
+#define COST_PAGE1 49
+
+#define COST_SPRITES 16
+#define FIRST_SPRITE 1
 
 extern uint8_t costume31[11234];
 extern uint8_t costume32[140];
+extern uint8_t actCostumes[2048];
+extern uint8_t *costumesPtr[_numCostumes];
+extern uint16_t actCostumesUsed;
+extern uint8_t anchors[6];
 
-#define COST_PAGE0 44
-#define COST_PAGE1 45
+static const uint8_t v1MMNESLookup[25] = {
+	0x00, 0x03, 0x01, 0x06, 0x08,
+	0x02, 0x00, 0x07, 0x0C, 0x04,
+	0x09, 0x0A, 0x12, 0x0B, 0x14,
+	0x0D, 0x11, 0x0F, 0x0E, 0x10,
+	0x17, 0x00, 0x01, 0x05, 0x16
+};
 
-static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
+static const uint8_t *getCostume(uint8_t cost)
 {
-    // TODO: sprite and animation allocation
-    Animation *animation = &act->anim;
+    if (!costumesPtr[cost])
+    {
+        uint8_t *ptr = actCostumes + actCostumesUsed;
+        HROOM src = seekResource(costumes + cost);
+        uint16_t sz = readResource(src, ptr, sizeof(actCostumes) - actCostumesUsed);
+        closeRoom(src);
+        actCostumesUsed += sz;
+        DEBUG_ASSERT(actCostumesUsed <= sizeof(actCostumes), "getCostume");
+        costumesPtr[cost] = ptr;
+    }
+    return costumesPtr[cost];
+}
+
+static void decodeNESCostume(Actor *act, uint8_t nextSprite)
+{
     // costume ID -> v1MMNESLookup[] -> desc -> lens & offs -> data -> Gfx & pal
     // _baseptr = _vm->getResourceAddress(rtCostume, id);
     // _dataOffsets = _baseptr + 2;
     //DEBUG_PRINTF("Decoding costume %d\n", costumes[act->costume]);
-    HROOM src = seekResource(costumes + act->costume);
+    const uint8_t *cost = getCostume(act->costume);
 
 	// int anim;
 
-    uint16_t size = readWord(src);
-    //DEBUG_PRINTF("Costume %d size %d\n", act->costume, size);
+    //uint16_t size = readWord(src);
+    cost += 2;
+    //DEBUG_PRINTF("Costume %d for actor %s\n", act->costume, act->name);
     // read data offsets from src
 
     // limb = 0 for v2 scumm
@@ -36,122 +66,121 @@ static uint8_t decodeNESCostume(Actor *act, uint8_t nextSprite)
 
     // _numAnim = 0x17 => numframes = 6
     uint8_t anim = act->frame * 4 + act->facing;
-    esx_f_seek(src, 2 * anim, ESX_SEEK_FWD);
-    uint8_t begin = readByte(src);
-    uint8_t end = readByte(src);
-    DEBUG_PRINTF("Decode animation %u/%u of %u frames from %u\n", anim, act->costume, end, begin);
-    DEBUG_ASSERT(end <= MAX_FRAMES, "decodeNESCostume");
-    esx_f_seek(src, begin - 2 * anim - 2, ESX_SEEK_FWD);
+    //esx_f_seek(src, 2 * anim, ESX_SEEK_FWD);
+    cost += 2 * anim;
+    uint8_t begin = *cost++;//readByte(src);
+    uint8_t end = *cost++;//readByte(src);
+    //DEBUG_PRINTF("Decode animation %u/%u of %u frames from %u\n", anim, act->costume, end, begin);
+    //DEBUG_ASSERT(end <= MAX_FRAMES, "decodeNESCostume");
+    //esx_f_seek(src, begin - 2 * anim - 2, ESX_SEEK_FWD);
+    cost += begin - 2 * anim - 2;
 
-    // read all frames
-    animation->frames = end;
-    uint8_t f;
+    act->frames = end;
     uint8_t *sprdata = costdata_id == 31 ? costume31 : costume32;
     uint8_t flipped = act->facing == 1;
-    for (f = 0 ; f < end ; ++f)
+    uint8_t frame = cost[act->curpos];//*cost++;//readByte(src);
+
+    uint16_t offset = READ_LE_UINT16(costdesc + v1MMNESLookup[act->costume] * 2 + 2);
+    uint8_t numSprites = costlens[offset + frame + 2] + 1;
+    //HROOM sprdata = seekResource(&costumes[costdata_id]);
+    //DEBUG_PRINTF("Frame %u numspr %u\n", f, numSprites);
+    // offset is the beginning
+    // in scummvm data is decoded in backwards direction, from the end
+    uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
+    DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
+    //esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
+    uint8_t *sprite = sprdata + sprOffs;
+
+    // bool flipped = (newDirToOldDir(a->getFacing()) == 1);
+    // int left = 239, right = 0, top = 239, bottom = 0;
+    // byte *maskBuf = _vm->getMaskBuffer(0, 0, 1);
+
+    uint8_t anchor = nextSprite;
+    act->anchor = nextSprite;
+
+    // setup anchor and relative sprite attributes and patterns
+    DEBUG_ASSERT(numSprites <= COST_SPRITES, "COST_SPRITES");
+
+    uint8_t spr;
+    for (spr = 0 ; spr < numSprites ; spr++)
     {
-        uint8_t frame = readByte(src);
+        uint8_t d0 = *sprite++;
+        uint8_t d1 = *sprite++;
+        uint8_t d2 = *sprite++;
+        uint8_t mask;
+        uint8_t sprpal = 0;
+        int8_t y, x;
 
-        uint16_t offset = READ_LE_UINT16(costdesc + v1MMNESLookup[act->costume] * 2 + 2);
-        uint8_t numSprites = costlens[offset + frame + 2] + 1;
-        //HROOM sprdata = seekResource(&costumes[costdata_id]);
-        // DEBUG_PRINTF("Costume %d size %d\n", costdata_id, sss);
-        // offset is the beginning
-        // in scummvm data is decoded in backwards direction, from the end
-        uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
-        //DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
-        //esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
-        uint8_t *sprite = sprdata + sprOffs;
+        mask = (d0 & 0x80) ? 0x01 : 0x80;
 
-        // bool flipped = (newDirToOldDir(a->getFacing()) == 1);
-        // int left = 239, right = 0, top = 239, bottom = 0;
-        // byte *maskBuf = _vm->getMaskBuffer(0, 0, 1);
+        y = d0 << 1;
+        y >>= 1;
 
-        uint8_t anchor = nextSprite;
-        animation->anchors[f] = nextSprite;
+        uint8_t tile = d1;
 
-        // setup anchor and relative sprite attributes and patterns
+        sprpal = (d2 & 0x03) << 2;
+        x = d2;
+        x >>= 2;
 
-        for (uint8_t spr = 0 ; spr < numSprites ; spr++)
-        {
-            uint8_t d0 = *sprite++;
-            uint8_t d1 = *sprite++;
-            uint8_t d2 = *sprite++;
-            uint8_t mask;
-            uint8_t sprpal = 0;
-            int8_t y, x;
-
-            mask = (d0 & 0x80) ? 0x01 : 0x80;
-
-            y = d0 << 1;
-            y >>= 1;
-
-            uint8_t tile = d1;
-
-            sprpal = (d2 & 0x03) << 2;
-            x = d2;
-            x >>= 2;
-
-        	if (flipped) {
-        		mask ^= 0x81;//(mask == 0x80) ? 0x01 : 0x80;
-        		x = -x;
-        	}
-
-            // setup tile
-            graphics_loadSpritePattern(nextSprite, tile, mask, sprpal);
-
-            // send attributes
-            IO_SPRITE_SLOT = nextSprite;
-            if (nextSprite == anchor)
-            {
-                animation->ax = x;
-                animation->ay = y;
-            }
-
-            x = x - animation->ax;
-            y = y - animation->ay;
-            IO_SPRITE_ATTRIBUTE = x;
-            IO_SPRITE_ATTRIBUTE = y;
-            // x is always zero for anchor
-            // for relative this attribute is zero too
-            IO_SPRITE_ATTRIBUTE = 0;//x < 0 ? 1 : 0;
-
-            if (nextSprite == anchor)
-            {
-                // invisible yet
-                IO_SPRITE_ATTRIBUTE = 0x40 | (nextSprite & 0x3f);
-                // anchor 4-bit sprite
-                IO_SPRITE_ATTRIBUTE = 0x80;
-            }
-            else
-            {
-                IO_SPRITE_ATTRIBUTE = 0xc0 | (nextSprite & 0x3f);
-                // relative sprite
-                IO_SPRITE_ATTRIBUTE = 0x40;
-            }
-
-            //DEBUG_PRINTF("Sprite %d tile=%d/%d x=%d y=%d\n", nextSprite, tile, flipped, x, y);
-
-            ++nextSprite;
+        if (flipped) {
+            mask ^= 0x81;//(mask == 0x80) ? 0x01 : 0x80;
+            x = -x;
         }
+
+        // setup tile
+        graphics_loadSpritePattern(nextSprite, tile, mask, sprpal);
+
+        // send attributes
+        IO_SPRITE_SLOT = nextSprite;
+        if (nextSprite == anchor)
+        {
+            act->ax = x;
+            act->ay = y;
+        }
+
+        x = x - act->ax;
+        y = y - act->ay;
+        IO_SPRITE_ATTRIBUTE = x;
+        IO_SPRITE_ATTRIBUTE = y;
+        // x is always zero for anchor
+        // for relative this attribute is zero too
+        IO_SPRITE_ATTRIBUTE = 0;//x < 0 ? 1 : 0;
+
+        if (nextSprite == anchor)
+        {
+            // invisible yet
+            IO_SPRITE_ATTRIBUTE = 0x40 | (nextSprite & 0x3f);
+            // anchor 4-bit sprite
+            IO_SPRITE_ATTRIBUTE = 0x80;
+        }
+        else
+        {
+            IO_SPRITE_ATTRIBUTE = 0xc0 | (nextSprite & 0x3f);
+            // relative sprite
+            IO_SPRITE_ATTRIBUTE = 0x40;
+        }
+
+        //DEBUG_PRINTF("Sprite %d tile=%d/%d x=%d y=%d\n", nextSprite, tile, flipped, x, y);
+
+        ++nextSprite;
     }
 
-	// DEBUG_PRINTF("Decode costume %u size=%u\n", costume, size);
-    // for (uint8_t i = 0 ; i < 16 ; ++i)
-    //     DEBUG_PRINTF("%x ", readWord(r));
-    // DEBUG_PUTS("\n");
-
-    closeRoom(src);
-
-    return nextSprite;
+    // clean other sprites in the slot
+    while (spr < COST_SPRITES)
+    {
+        IO_SPRITE_SLOT = nextSprite++;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        ++spr;
+    }
 }
 
 void costume_loadData(void)
 {
-    uint8_t page0 = ZXN_READ_MMU0();
-    ZXN_WRITE_MMU0(COST_PAGE0);
-    uint8_t page1 = ZXN_READ_MMU1();
-    ZXN_WRITE_MMU1(COST_PAGE1);
+    PUSH_PAGE(0, COST_PAGE0);
+    PUSH_PAGE(1, COST_PAGE1);
 
     HROOM cost = seekResource(&costumes[31]);
     readResource(cost, costume31, sizeof(costume31));
@@ -161,8 +190,8 @@ void costume_loadData(void)
     readResource(cost, costume32, sizeof(costume32));
     closeRoom(cost);
 
-    ZXN_WRITE_MMU0(page0);
-    ZXN_WRITE_MMU1(page1);
+    POP_PAGE(0);
+    POP_PAGE(1);
 }
 
 void costume_updateAll(void)
@@ -174,47 +203,61 @@ void costume_updateAll(void)
         // some hack for cursor id
         costdata_id == 32 ? 0xfe : 0xfa, 0x80, 1);
 
-    uint8_t page0 = ZXN_READ_MMU0();
-    ZXN_WRITE_MMU0(COST_PAGE0);
-    uint8_t page1 = ZXN_READ_MMU1();
-    ZXN_WRITE_MMU1(COST_PAGE1);
+    PUSH_PAGE(0, COST_PAGE0);
+    PUSH_PAGE(1, COST_PAGE1);
 
-    // for (i = 1 ; i < 64 ; ++i)
-    // {
-    //     graphics_loadSpritePattern(i, i + 192, 0x80, 0);
-    //     // send attributes
-    //     IO_SPRITE_SLOT = i;
-    //     IO_SPRITE_ATTRIBUTE = (i & 0xf) << 4; // x
-    //     IO_SPRITE_ATTRIBUTE = (i & 0xf0) + 0x20; // y
-    //     IO_SPRITE_ATTRIBUTE = 0;
-    //     IO_SPRITE_ATTRIBUTE = 0xc0 | (i & 0x3f);
-    //     IO_SPRITE_ATTRIBUTE = 0x80 | (i & 0x40); // anchor 4-bit sprite
-    // }
-    // return;
-    // DEBUG_HALT;
+    // clean all sprites
+    for (i = 0 ; i <= 127 ; ++i)
+    {
+        IO_SPRITE_SLOT = i;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        ++i;
+    }
+
+    for (i = 0 ; i < sizeof(anchors) ; ++i)
+        anchors[i] = 0;
 
     // decode costume sprites
-    uint8_t nextSprite = 1;
+    uint8_t nextSprite = FIRST_SPRITE;
+    uint8_t a = 0;
     for (i = 0 ; i < ACTOR_COUNT ; ++i)
     {
         if (currentRoom && actors[i].room == currentRoom)
         {
-            DEBUG_ASSERT(nextSprite <= 63, "costume_updateAll");
-            nextSprite = decodeNESCostume(&actors[i], nextSprite);
+            anchors[a++] = 1;
+            DEBUG_ASSERT(nextSprite <= 127 && a <= sizeof(anchors), "costume_updateAll");
+            decodeNESCostume(&actors[i], nextSprite);
+            nextSprite += COST_SPRITES;
         }
     }
 
-    // clean unused sprites
-    while (nextSprite <= 63)
+    POP_PAGE(0);
+    POP_PAGE(1);
+}
+
+void costume_updateActor(Actor *act)
+{
+    PUSH_PAGE(0, COST_PAGE0);
+    PUSH_PAGE(1, COST_PAGE1);
+
+    uint8_t anchor = act->anchor;
+    uint8_t a = 0;
+    while (anchors[a])
+        ++a;
+    DEBUG_ASSERT(a < sizeof(anchors), "costume_updateActor");
+    decodeNESCostume(act, FIRST_SPRITE + a * COST_SPRITES);
+    anchors[a] = 1;
+    if (anchor)
     {
-        IO_SPRITE_SLOT = nextSprite;
-        IO_SPRITE_ATTRIBUTE = 0;
-        IO_SPRITE_ATTRIBUTE = 0;
-        IO_SPRITE_ATTRIBUTE = 0;
-        IO_SPRITE_ATTRIBUTE = 0;
-        ++nextSprite;
+        anchors[anchor / COST_SPRITES] = 0;
+        act->old_anchor = anchor;
     }
 
-    ZXN_WRITE_MMU0(page0);
-    ZXN_WRITE_MMU1(page1);
+    //DEBUG_PRINTF("Update costume old=%d new=%d\n", anchor, FIRST_SPRITE + a * COST_SPRITES);
+
+    POP_PAGE(0);
+    POP_PAGE(1);
 }

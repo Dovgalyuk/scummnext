@@ -46,14 +46,13 @@ extern uint8_t costoffs[];
 
 extern uint8_t costdata_id;
 
-extern const uint8_t v1MMNESLookup[];
-
 void initGraphics(void);
 
 void decodeNESTrTable(void);
 void decodeNESGfx(HROOM r);
 void decodeRoomBackground(HROOM r);
 
+void graphics_clearScreen(void);
 void graphics_updateScreen(void);
 
 void graphics_loadCostumeSet(uint8_t n);

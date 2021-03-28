@@ -113,7 +113,9 @@ void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, 
     uint8_t page = ZXN_READ_MMU0();
     ZXN_WRITE_MMU0(BUF_PAGE);
 
-    IO_SPRITE_SLOT = nextSprite;
+    uint8_t spr = (nextSprite & 0x3f) | ((nextSprite & 0x40) << 1);
+
+    IO_SPRITE_SLOT = spr;
     uint8_t i;
     //DEBUG_PRINTF("tile: %x\n", tile);
     uint8_t *t = &spriteTiles[tile * 16];
@@ -152,14 +154,15 @@ void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, 
     for (i = 0 ; i < 64 ; ++i)
         IO_SPRITE_PATTERN = 0x0;
     // second pattern, unused yet
-    for (i = 0 ; i < 128 ; ++i)
-        IO_SPRITE_PATTERN = 0x0;
+    // for (i = 0 ; i < 128 ; ++i)
+    //     IO_SPRITE_PATTERN = 0x0;
 
     ZXN_WRITE_MMU0(page);
 }
 
 void decodeTiles(uint8_t set)
 {
+    DEBUG_PRINTF("Decoding tiles set %u\n", set);
     uint8_t page = ZXN_READ_MMU0();
     ZXN_WRITE_MMU0(BUF_PAGE);
     setTiles(decodeNESTiles(tileBuf, 37 + set));

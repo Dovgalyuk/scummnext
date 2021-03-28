@@ -52,7 +52,10 @@ int main()
 	}
 	for (i = 0; i < _numCostumes; i++) {
         costumes[i].roomoffs = readWord(f);
-        //printf("costume %u room %u offs %u\n", i, costumes[i].room, costumes[i].roomoffs);
+        // HROOM c = seekResource(&costumes[i]);
+        // uint16_t sz = readWord(c);
+        // closeRoom(c);
+        //DEBUG_PRINTF("costume %u room %u offs %u size %u\n", i, costumes[i].room, costumes[i].roomoffs, sz);
 	}
 
 	for (i = 0; i < _numScripts; i++) {
