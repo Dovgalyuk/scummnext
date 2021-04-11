@@ -322,7 +322,7 @@ void actor_setRoom(uint8_t actor, uint8_t room)
     // DEBUG_PRINTF("Put actor %u in room %u\n", actor, room);
     actors[actor].room = room;
 
-    costume_updateAll();
+    costume_updateActor(&actors[actor]);
 }
 
 void actor_put(uint8_t actor, uint8_t x, uint8_t y)

@@ -424,24 +424,36 @@ static void clearTalkArea(void)
         clearLine(i);
 }
 
-static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap, uint8_t color)
+void graphics_clearInventory(void)
+{
+    uint8_t i;
+    for (i = 0 ; i < INV_ROWS ; ++i)
+        clearLine(INV_TOP + i);
+}
+
+
+void graphics_printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t left, uint8_t color, uint8_t len)
 {
     PUSH_PAGE(0, GRAPH_PAGE);
 
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + x * TILE_BYTES + y * LINE_BYTES;
+    uint8_t curpos = 0;
     while (*s)
     {
         uint8_t c = *s++;
+        if (curpos >= len)
+            continue;
         if (c == '@')
         {
             continue;
         }
         else if (c == 1)
         {
+            curpos = 0;
             // newline
             if (x != 0)
             {
-                screen += 2 * gap * TILE_BYTES + (LINE_WIDTH - gap - x) * TILE_BYTES;
+                screen += 2 * left * TILE_BYTES + (LINE_WIDTH - left - x) * TILE_BYTES;
                 x = 0;
             }
             continue;
@@ -464,11 +476,11 @@ static void printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t gap, uint8
         *screen++ = translationTable[c];
         *screen++ = color << 4;
         ++x;
-        if (x >= LINE_WIDTH - gap)
-        {
-            x = 0;
-            screen += 2 * gap * TILE_BYTES;
-        }
+        // if (x >= LINE_WIDTH - gap)
+        // {
+        //     x = 0;
+        //     screen += 2 * gap * TILE_BYTES;
+        // }
     }
 
     POP_PAGE(0);
@@ -479,32 +491,49 @@ void graphics_print(const char *s, uint8_t c)
     clearTalkArea();
     // TODO: correct color
     c = 3;
-    printAtXY(s, TEXT_GAP, 0, TEXT_GAP, c);
+    graphics_printAtXY(s, TEXT_GAP, 0, TEXT_GAP, c, SCREEN_WIDTH);
 }
 
 void graphics_printSentence(const char *s)
 {
     clearLine(SCREEN_HEIGHT + SCREEN_TOP);
     // color offset 3 to match transparent color
-    printAtXY(s, TEXT_GAP, SCREEN_HEIGHT + SCREEN_TOP, TEXT_GAP, 3);
+    graphics_printAtXY(s, TEXT_GAP, SCREEN_HEIGHT + SCREEN_TOP, TEXT_GAP, 3, SCREEN_WIDTH);
 }
 
 void graphics_drawVerb(VerbSlot *v)
 {
     // color offset 3 to match transparent color
-    printAtXY(v->name, LINE_GAP + v->x, v->y, LINE_GAP, 3);
+    graphics_printAtXY(v->name, LINE_GAP + v->x, v->y, LINE_GAP, 3, SCREEN_WIDTH);
 }
 
 void graphics_drawInventory(uint8_t slot, const char *s)
 {
+    uint8_t x = 0;
+    // only 2 cols supported
+    if (slot % INV_COLS)
+        x = INV_SLOT_WIDTH + INV_ARR_W;
     // color offset 3 to match transparent color
-    printAtXY(s, INV_GAP + INV_WIDTH / INV_COLS * (slot % INV_COLS),
-        INV_TOP + slot / INV_COLS, INV_GAP, 3);
+    graphics_printAtXY(s, INV_GAP + x,
+        INV_TOP + slot / INV_COLS, INV_GAP, 3, INV_SLOT_WIDTH);
 }
 
 void graphics_clearScreen(void)
 {
     uint8_t i;
+
+    // clear sprites first
+    for (i = 0 ; i <= 127 ; ++i)
+    {
+        IO_SPRITE_SLOT = i;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        IO_SPRITE_ATTRIBUTE = 0;
+        ++i;
+    }
+
+    // clear tiles after
     for (i = 0 ; i < SCREEN_TOP + SCREEN_HEIGHT ; ++i)
         clearLine(i);
 }
@@ -569,6 +598,7 @@ void graphics_updateScreen(void)
             xx = act->x * V12_X_MULTIPLIER + act->ax - offs * 8;
             if (act->old_anchor)
             {
+                //DEBUG_PRINTF("Clear old sprite %d\n", act->old_anchor);
                 // switch old sprite off
                 IO_SPRITE_SLOT = act->old_anchor;
                 IO_SPRITE_ATTRIBUTE = 0;

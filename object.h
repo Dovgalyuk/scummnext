@@ -83,5 +83,6 @@ void readGlobalObjects(HROOM r);
 void inventory_redraw(void);
 void inventory_addObject(Object *obj, uint8_t room);
 uint16_t inventory_checkXY(int8_t x, int8_t y);
+void inventory_checkButtons(int8_t x, int8_t y);
 
 #endif

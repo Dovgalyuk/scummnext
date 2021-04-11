@@ -46,6 +46,8 @@ static const uint8_t *getCostume(uint8_t cost)
 
 static void decodeNESCostume(Actor *act, uint8_t nextSprite)
 {
+    //DEBUG_PRINTF("Decode for %d\n", nextSprite);
+
     // costume ID -> v1MMNESLookup[] -> desc -> lens & offs -> data -> Gfx & pal
     // _baseptr = _vm->getResourceAddress(rtCostume, id);
     // _dataOffsets = _baseptr + 2;
@@ -67,18 +69,16 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
     // _numAnim = 0x17 => numframes = 6
     uint8_t anim = act->frame * 4 + act->facing;
     //esx_f_seek(src, 2 * anim, ESX_SEEK_FWD);
-    cost += 2 * anim;
-    uint8_t begin = *cost++;//readByte(src);
-    uint8_t end = *cost++;//readByte(src);
+    uint8_t begin = cost[2 * anim];//readByte(src);
+    uint8_t end = cost[2 * anim + 1];//readByte(src);
     //DEBUG_PRINTF("Decode animation %u/%u of %u frames from %u\n", anim, act->costume, end, begin);
     //DEBUG_ASSERT(end <= MAX_FRAMES, "decodeNESCostume");
     //esx_f_seek(src, begin - 2 * anim - 2, ESX_SEEK_FWD);
-    cost += begin - 2 * anim - 2;
 
     act->frames = end;
     uint8_t *sprdata = costdata_id == 31 ? costume31 : costume32;
     uint8_t flipped = act->facing == 1;
-    uint8_t frame = cost[act->curpos];//*cost++;//readByte(src);
+    uint8_t frame = cost[begin + act->curpos];//*cost++;//readByte(src);
 
     uint16_t offset = READ_LE_UINT16(costdesc + v1MMNESLookup[act->costume] * 2 + 2);
     uint8_t numSprites = costlens[offset + frame + 2] + 1;
@@ -87,7 +87,7 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
     // offset is the beginning
     // in scummvm data is decoded in backwards direction, from the end
     uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
-    DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
+    //DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
     //esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
     uint8_t *sprite = sprdata + sprOffs;
 
@@ -95,7 +95,6 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
     // int left = 239, right = 0, top = 239, bottom = 0;
     // byte *maskBuf = _vm->getMaskBuffer(0, 0, 1);
 
-    uint8_t anchor = nextSprite;
     act->anchor = nextSprite;
 
     // setup anchor and relative sprite attributes and patterns
@@ -132,7 +131,7 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
 
         // send attributes
         IO_SPRITE_SLOT = nextSprite;
-        if (nextSprite == anchor)
+        if (!spr)
         {
             act->ax = x;
             act->ay = y;
@@ -146,7 +145,7 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
         // for relative this attribute is zero too
         IO_SPRITE_ATTRIBUTE = 0;//x < 0 ? 1 : 0;
 
-        if (nextSprite == anchor)
+        if (!spr)
         {
             // invisible yet
             IO_SPRITE_ATTRIBUTE = 0x40 | (nextSprite & 0x3f);
@@ -198,14 +197,6 @@ void costume_updateAll(void)
 {
     uint8_t i;
 
-    // we always need a sprite for the cursor
-    graphics_loadSpritePattern(SPRITE_CURSOR,
-        // some hack for cursor id
-        costdata_id == 32 ? 0xfe : 0xfa, 0x80, 1);
-
-    PUSH_PAGE(0, COST_PAGE0);
-    PUSH_PAGE(1, COST_PAGE1);
-
     // clean all sprites
     for (i = 0 ; i <= 127 ; ++i)
     {
@@ -217,8 +208,18 @@ void costume_updateAll(void)
         ++i;
     }
 
+    // we always need a sprite for the cursor
+    graphics_loadSpritePattern(SPRITE_CURSOR,
+        // some hack for cursor id
+        costdata_id == 32 ? 0xfe : 0xfa, 0x80, 1);
+
+    PUSH_PAGE(0, COST_PAGE0);
+    PUSH_PAGE(1, COST_PAGE1);
+
     for (i = 0 ; i < sizeof(anchors) ; ++i)
         anchors[i] = 0;
+
+    //DEBUG_PUTS("Update all costumes\n");
 
     // decode costume sprites
     uint8_t nextSprite = FIRST_SPRITE;
@@ -245,11 +246,14 @@ void costume_updateActor(Actor *act)
 
     uint8_t anchor = act->anchor;
     uint8_t a = 0;
-    while (anchors[a])
-        ++a;
-    DEBUG_ASSERT(a < sizeof(anchors), "costume_updateActor");
-    decodeNESCostume(act, FIRST_SPRITE + a * COST_SPRITES);
-    anchors[a] = 1;
+    if (act->room == currentRoom)
+    {
+        while (anchors[a])
+            ++a;
+        DEBUG_ASSERT(a < sizeof(anchors), "costume_updateActor");
+        decodeNESCostume(act, FIRST_SPRITE + a * COST_SPRITES);
+        anchors[a] = 1;
+    }
     if (anchor)
     {
         anchors[anchor / COST_SPRITES] = 0;

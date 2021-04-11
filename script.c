@@ -1986,7 +1986,7 @@ void checkExecVerbs(void)
 		// Generic keyboard input
 		//runInputScript(kKeyClickArea, _mouseAndKeyboardStat, 1);
 	} else if (state & MBS_MOUSE_MASK) {
-        DEBUG_PRINTF("Clicked at %d %d\n", cursorX, cursorY);
+        //DEBUG_PRINTF("Clicked at %d %d\n", cursorX, cursorY);
         uint8_t y = cursorY / 8;
 		uint8_t zone = graphics_findVirtScreen(y);
 		//const uint8_t code = state & MBS_LEFT_CLICK ? 1 : 2;
@@ -2005,17 +2005,25 @@ void checkExecVerbs(void)
 		// 	runInputScript(kSentenceClickArea, 0, 0);
             uint8_t over = verb_findAtPos(x, y);
             if (over != 0) {
-                DEBUG_PRINTF("Clicked verb %s\n", verbs[over].name);
+                //DEBUG_PRINTF("Clicked verb %s\n", verbs[over].name);
 				// Verb was clicked
 				runInputScript(kVerbClickArea, verbs[over].verbid);
             }
             if (y >= INV_TOP)
             {
             	// Click into V2 inventory
+                // TODO: Some coordinate hack
+                x += LINE_GAP;
             	uint16_t object = inventory_checkXY(x, y);
                 DEBUG_PRINTF("Clicked object %u\n", object);
             	if (object > 0)
+                {
             		runInputScript(kInventoryClickArea, object);
+                }
+                else
+                {
+                    inventory_checkButtons(x, y);
+                }
             }
         }
         else if (zone == kMainVirtScreen)

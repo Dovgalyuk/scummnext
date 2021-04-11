@@ -7,6 +7,8 @@
 #include "graphics.h"
 #include "script.h"
 
+#define MAX_INV (INV_COLS * INV_ROWS)
+
 extern Object objects[_numLocalObjects];
 extern uint8_t objectOwnerTable[_numGlobalObjects];
 extern uint8_t objectStateTable[_numGlobalObjects];
@@ -402,11 +404,14 @@ void inventory_redraw(void)
 
 	// if (!(_userState & USERSTATE_IFACE_INVENTORY))	// Don't draw inventory unless active
 	// 	return;
+    graphics_clearInventory();
 
-	// uint8_t max_inv = inventory_getCount(scummVars[VAR_EGO]) - inventoryOffset;
-	// if (max_inv > 4)
-	// 	max_inv = 4;
+    uint8_t all = inventory_getCount(scummVars[VAR_EGO]);
+	uint8_t max_inv = all - inventoryOffset;
+	if (max_inv > 4)
+	    max_inv = 4;
     uint8_t count = 0;
+    uint8_t slot = 0;
     // Object *obj = objects;
     // Object *end = objects + _numObjects;
     Inventory *obj = invObjects;
@@ -417,10 +422,17 @@ void inventory_redraw(void)
             || objectOwnerTable[obj->obj_nr] != scummVars[VAR_EGO])
 			continue;
 
+        ++count;
+        if (count <= inventoryOffset)
+            continue;
+
         char name[32];
         readName(name, obj->room, obj->OBCDoffset, obj->nameOffs);
-        graphics_drawInventory(count, name);
-        ++count;
+        graphics_drawInventory(slot, name);
+        ++slot;
+
+        if (slot >= max_inv)
+            break;
 
 		//uint16_t obj = inventory_find(scummVars[VAR_EGO], i + 1 + inventoryOffset);
 
@@ -442,23 +454,17 @@ void inventory_redraw(void)
 	}
 
 
-	// // If necessary, draw "up" arrow
-	// if (_inventoryOffset > 0) {
-	// 	_string[1].xpos = _mouseOverBoxesV2[kInventoryUpArrow].rect.left;
-	// 	_string[1].ypos = _mouseOverBoxesV2[kInventoryUpArrow].rect.top + vs->topline;
-	// 	_string[1].right = _mouseOverBoxesV2[kInventoryUpArrow].rect.right - 1;
-	// 	_string[1].color = _mouseOverBoxesV2[kInventoryUpArrow].color;
-    //     drawString(1, (const byte *)"\x7E");
-	// }
+	// If necessary, draw "up" arrow
+	if (inventoryOffset > 0)
+    {
+        graphics_printAtXY("\x7e", INV_UP_X, INV_ARR_Y, 0, 3, 1);
+	}
 
-	// // If necessary, draw "down" arrow
-	// if (_inventoryOffset + 4 < getInventoryCount(_scummVars[VAR_EGO])) {
-	// 	_string[1].xpos = _mouseOverBoxesV2[kInventoryDownArrow].rect.left;
-	// 	_string[1].ypos = _mouseOverBoxesV2[kInventoryDownArrow].rect.top + vs->topline;
-	// 	_string[1].right = _mouseOverBoxesV2[kInventoryDownArrow].rect.right - 1;
-	// 	_string[1].color = _mouseOverBoxesV2[kInventoryDownArrow].color;
-    //     drawString(1, (const byte *)"\x7F");
-	// }
+	// If necessary, draw "down" arrow
+	if (inventoryOffset + 4 < all)
+    {
+        graphics_printAtXY("\x7f", INV_DOWN_X, INV_ARR_Y, 0, 3, 1);
+	}
 }
 
 void inventory_addObject(Object *obj, uint8_t room)
@@ -503,15 +509,29 @@ void inventory_addObject(Object *obj, uint8_t room)
 
 uint16_t inventory_checkXY(int8_t x, int8_t y)
 {
+    //DEBUG_PRINTF("check %d %d\n", x, y);
     y -= INV_TOP;
     x -= INV_GAP;
     if (x < 0 || y < 0 || y >= INV_ROWS)
+    {
         return 0;
-    x /= INV_WIDTH / INV_COLS;
-    if (x >= INV_COLS)
-        return 0;
+    }
 
-    uint8_t slot = x + y * INV_COLS;
+    if (x < INV_SLOT_WIDTH)
+    {
+        x = 0;
+    }
+    else if (x >= INV_SLOT_WIDTH + INV_ARR_W && x < INV_WIDTH)
+    {
+        x = 1;
+    }
+    else
+    {
+        return 0;
+    }
+
+    //DEBUG_PRINTF(" --- %d %d\n", x, y);
+    uint8_t slot = x + y * INV_COLS + inventoryOffset;
     uint8_t count = 0;
     Inventory *obj = invObjects;
     Inventory *end = invObjects + _numInventory;
@@ -525,5 +545,30 @@ uint16_t inventory_checkXY(int8_t x, int8_t y)
             return obj->obj_nr;
 
         ++count;
+    }
+
+    return 0;
+}
+
+void inventory_checkButtons(int8_t x, int8_t y)
+{
+    // check up and down arrows
+    if (y == INV_ARR_Y)
+    {
+        DEBUG_PRINTF("Check buttons %d %d\n", x, inventoryOffset);
+        if (x == INV_UP_X && inventoryOffset > 0)
+        {
+            inventoryOffset -= 2;
+            inventory_redraw();
+        }
+        else if (x == INV_DOWN_X)
+        {
+            uint8_t all = inventory_getCount(scummVars[VAR_EGO]);
+            if (all - inventoryOffset > INV_COLS * INV_ROWS)
+            {
+                inventoryOffset += 2;
+                inventory_redraw();
+            }
+        }
     }
 }
