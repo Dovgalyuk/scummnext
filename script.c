@@ -335,6 +335,13 @@ static void setStateCommon(uint8_t type)
 	object_setState(obj, object_getState(obj) | type);
 }
 
+static void resetSentence(void)
+{
+	scummVars[VAR_SENTENCE_VERB] = scummVars[VAR_BACKUP_VERB];
+	scummVars[VAR_SENTENCE_OBJECT1] = 0;
+	scummVars[VAR_SENTENCE_OBJECT2] = 0;
+	scummVars[VAR_SENTENCE_PREPOSITION] = 0;
+}
 
 ///////////////////////////////////////////////////////////
 // opcodes
@@ -922,6 +929,24 @@ static void op_cutscene(void)
 {
     DEBUG_PUTS("cutscene\n");
     // TODO
+
+	// vm.cutSceneData[0] = _userState | (_userPut ? 16 : 0);
+	// vm.cutSceneData[1] = (int16)VAR(VAR_CURSORSTATE);
+	// vm.cutSceneData[2] = _currentRoom;
+	// vm.cutSceneData[3] = camera._mode;
+
+	// VAR(VAR_CURSORSTATE) = 200;
+
+	// // Hide inventory, freeze scripts, hide cursor
+	// setUserState(USERSTATE_SET_IFACE |
+	// 	USERSTATE_SET_CURSOR |
+	// 	USERSTATE_SET_FREEZE | USERSTATE_FREEZE_ON);
+
+	// _sentenceNum = 0;
+	stopScript(SENTENCE_SCRIPT);
+	resetSentence();
+
+	// vm.cutScenePtr[0] = 0;
 }
 
 static void op_startScript(void)
@@ -1129,7 +1154,7 @@ static void op_loadRoomWithEgo(void)
 
 	// _fullRedraw = true;
 
-	// resetSentence();
+	resetSentence();
 
 	if (x >= 0 && y >= 0) {
         actor_startWalk(ego, x, y);
@@ -1379,7 +1404,7 @@ static void op_doSentence(void)
         return;
     }
     if (verb == 0xFB) {
-        // resetSentence();
+        resetSentence();
         return;
     }
 
@@ -1998,7 +2023,8 @@ void checkExecVerbs(void)
 		// 	return;
 
         uint8_t x = cursorX / 8;
-        DEBUG_PRINTF("Clicked at %d %d %d\n", x, y, zone);
+        DEBUG_PRINTF("Clicked at %d %d %d virt %d %d\n", x, y, zone,
+            scummVars[VAR_VIRT_MOUSE_X], scummVars[VAR_VIRT_MOUSE_Y]);
 		if (zone == kVerbVirtScreen/* && _mouse.y <= zone->topline + 8*/)
         {
 		// 	// Click into V2 sentence line
