@@ -219,7 +219,7 @@ void costume_updateAll(void)
     for (i = 0 ; i < sizeof(anchors) ; ++i)
         anchors[i] = 0;
 
-    //DEBUG_PUTS("Update all costumes\n");
+    DEBUG_PUTS("Update all costumes\n");
 
     // decode costume sprites
     uint8_t nextSprite = FIRST_SPRITE;

@@ -107,9 +107,7 @@ void startScene(uint8_t room/*, Actor *a, int objectNr*/)
 
 	// clearDrawQueues();
 
-	// for (i = 1; i < _numActors; i++) {
-	// 	_actors[i]->hideActor();
-	// }
+	//actors_hide();
 
     // for (i = 0; i < 256; i++) {
     //     _roomPalette[i] = i;

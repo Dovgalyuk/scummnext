@@ -14,7 +14,7 @@ typedef struct Actor
     char name[16];
     // not used for NES
     //uint8_t talkColor;
-    
+
     // movement parameters
     uint8_t destX, destY;
     uint8_t nextX, nextY;
@@ -50,6 +50,7 @@ extern uint8_t defaultTalkColor;
 void actors_walk(void);
 void actors_animate(void);
 void actors_show(void);
+//void actors_hide(void);
 
 uint8_t actor_getX(uint8_t actor);
 uint8_t actor_isMoving(uint8_t actor);

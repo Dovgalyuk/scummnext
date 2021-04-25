@@ -9,6 +9,7 @@
 #include "script.h"
 #include "string.h"
 
+#define _walkFrame      0
 #define _standFrame     1
 #define _initFrame      2
 #define _talkStopFrame  4
@@ -36,6 +37,18 @@ static void actor_setBox(Actor *a, uint8_t box)
     a->walkbox = box;
     // setupActorScale();
     // DEBUG_PRINTF("Set box %u\n", box);
+}
+
+static void startAnimActor(Actor *a, uint8_t f)
+{
+    //DEBUG_PRINTF("Actor %u start anim %u\n", a - actors, f);
+    // then void Actor::startAnimActor(int f = anim/4)
+    // _animProgress = 0;
+    // _needRedraw = true;
+    // _cost.animCounter = 0;
+    a->frame = f;
+    a->curpos = 0;
+    costume_updateActor(a);
 }
 
 static void actor_calcMovementFactor(Actor *a, uint8_t nextX, uint8_t nextY)
@@ -98,7 +111,7 @@ static void actor_calcMovementFactor(Actor *a, uint8_t nextX, uint8_t nextY)
         else
             dir = 3; // 0
     }
-    
+
     a->targetFacing = dir;
     // _targetFacing = getAngleFromPos(V12_X_MULTIPLIER*deltaXFactor, V12_Y_MULTIPLIER*deltaYFactor, false);
 }
@@ -116,6 +129,7 @@ static void actor_walkStep(Actor *a)
     //     if (_walkFrame != _frame || _facing != nextFacing) {
     //         startWalkAnim(1, nextFacing);
     //     }
+        startAnimActor(a, _walkFrame);
         a->moving |= MF_IN_LEG;
     }
 
@@ -186,12 +200,12 @@ static void actor_walk(Actor *a)
         {
             a->facing = a->targetFacing;
             a->moving &= ~MF_TURN;
-            costume_updateActor(a);
         }
         else
         {
             a->moving = 0;
         }
+        costume_updateActor(a);
         return;
     }
 
@@ -199,7 +213,7 @@ static void actor_walk(Actor *a)
         actor_walkStep(a);
     } else if (a->moving & MF_LAST_LEG) {
         a->moving = 0;
-        // startAnimActor(_standFrame);
+        startAnimActor(a, _standFrame);
         // if (a->targetFacing != a->destdir && a->destdir != -1)
         // {
         //     a->targetFacing = a->destdir;
@@ -217,6 +231,7 @@ static void actor_walk(Actor *a)
             next_box = boxes_getNext(a->walkbox, a->destbox);
             if (next_box < 0) {
                 a->moving |= MF_LAST_LEG;
+                costume_updateActor(a);
                 return;
             }
 
@@ -235,18 +250,6 @@ static void actor_walk(Actor *a)
         actor_calcMovementFactor(a, foundX, foundY);
         actor_walkStep(a);
     }
-}
-
-static void startAnimActor(uint8_t actor, uint8_t f)
-{
-    // TODO
-    //DEBUG_PRINTF("Actor %u start anim %u\n", actor, f);
-    // then void Actor::startAnimActor(int f = anim/4)
-    // _animProgress = 0;
-    // _needRedraw = true;
-    // _cost.animCounter = 0;
-    actors[actor].frame = f;
-    actors[actor].curpos = 0;
 }
 
 static void actor_setDirection(uint8_t actor, uint8_t dir)
@@ -395,7 +398,7 @@ void actors_walk(void)
 void actor_animate(uint8_t actor, uint8_t anim)
 {
     // TODO: different commands and directions from void Actor::animateActor(int anim)
-
+    Actor *a = &actors[actor];
     uint8_t cmd = anim / 4;
     uint8_t dir = anim % 4;
 
@@ -407,23 +410,22 @@ void actor_animate(uint8_t actor, uint8_t anim)
 	switch (cmd) {
 	case 2:				// stop walking
         //DEBUG_PRINTF("TODO: Actor %u stop walking\n", actor);
-		startAnimActor(actor, _standFrame);
-        actors[actor].moving = 0;
+        a->moving = 0;
+		startAnimActor(a, _standFrame);
 		// stopActorMoving();
 		break;
 	case 3:				// change direction immediatly
 	    actor_setDirection(actor, dir);
+        costume_updateActor(a);
 		break;
 	case 4:				// turn to new direction
 		actor_turnToDirection(actor, dir);
 		break;
 	case 64:
 	default:
-        startAnimActor(actor, anim / 4);
+        startAnimActor(a, anim / 4);
         break;
     }
-
-    costume_updateActor(&actors[actor]);
 }
 
 void actors_animate(void)
@@ -467,17 +469,19 @@ void actor_walkToObject(uint8_t actor, uint16_t obj_id)
 	// a->startWalkActor(x, y, dir);
 }
 
-static void actor_show(uint8_t a)
+static void actor_show(Actor *a)
 {
     // if (_visible) return;
 
 //	adjustActorPos();
     // _cost.reset();
-    startAnimActor(a, _standFrame);
-    startAnimActor(a, _initFrame);
+
+    //startAnimActor(a, _standFrame);
+    //startAnimActor(a, _initFrame);
     startAnimActor(a, _talkStopFrame);
+
 	// stopActorMoving();
-    actors[a].moving = 0;
+    a->moving = 0;
 	// _visible = true;
 	// _needRedraw = true;
 }
@@ -489,7 +493,7 @@ void actors_show(void)
     {
         if (actor_isInCurrentRoom(i))
         {
-            actor_show(i);
+            actor_show(&actors[i]);
         }
     }
     costume_updateAll();
