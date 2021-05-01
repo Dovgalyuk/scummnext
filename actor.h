@@ -50,7 +50,7 @@ extern uint8_t defaultTalkColor;
 void actors_walk(void);
 void actors_animate(void);
 void actors_show(void);
-//void actors_hide(void);
+void actors_draw(uint8_t offs, uint8_t gap);
 
 uint8_t actor_getX(uint8_t actor);
 uint8_t actor_isMoving(uint8_t actor);

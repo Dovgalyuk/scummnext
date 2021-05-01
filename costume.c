@@ -167,11 +167,12 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
     // clean other sprites in the slot
     while (spr < COST_SPRITES)
     {
-        IO_SPRITE_SLOT = nextSprite++;
+        IO_SPRITE_SLOT = nextSprite;
         IO_SPRITE_ATTRIBUTE = 0;
         IO_SPRITE_ATTRIBUTE = 0;
         IO_SPRITE_ATTRIBUTE = 0;
         IO_SPRITE_ATTRIBUTE = 0;
+        ++nextSprite;
         ++spr;
     }
 }
@@ -205,7 +206,6 @@ void costume_updateAll(void)
         IO_SPRITE_ATTRIBUTE = 0;
         IO_SPRITE_ATTRIBUTE = 0;
         IO_SPRITE_ATTRIBUTE = 0;
-        ++i;
     }
 
     // we always need a sprite for the cursor
@@ -228,7 +228,9 @@ void costume_updateAll(void)
     {
         if (currentRoom && actors[i].room == currentRoom)
         {
-            anchors[a++] = 1;
+            anchors[a] = 1;
+            ++a;
+            actors[i].old_anchor = 0;
             DEBUG_ASSERT(nextSprite <= 127 && a <= sizeof(anchors), "costume_updateAll");
             decodeNESCostume(&actors[i], nextSprite);
             nextSprite += COST_SPRITES;
@@ -248,19 +250,80 @@ void costume_updateActor(Actor *act)
     uint8_t a = 0;
     if (act->room == currentRoom)
     {
-        while (anchors[a])
-            ++a;
+        if (act->old_anchor)
+        {
+            a = act->old_anchor / COST_SPRITES;
+        }
+        else
+        {
+            while (anchors[a])
+                ++a;
+        }
         DEBUG_ASSERT(a < sizeof(anchors), "costume_updateActor");
+        // sets act->anchor
         decodeNESCostume(act, FIRST_SPRITE + a * COST_SPRITES);
         anchors[a] = 1;
     }
-    if (anchor)
-    {
-        anchors[anchor / COST_SPRITES] = 0;
-        act->old_anchor = anchor;
-    }
+    act->old_anchor = anchor;
 
     //DEBUG_PRINTF("Update costume old=%d new=%d\n", anchor, FIRST_SPRITE + a * COST_SPRITES);
+
+    POP_PAGE(0);
+    POP_PAGE(1);
+}
+
+void actors_draw(uint8_t offs, uint8_t gap)
+{
+    PUSH_PAGE(0, COST_PAGE0);
+    PUSH_PAGE(1, COST_PAGE1);
+
+    uint8_t i;
+    // draw actors
+    for (i = 0 ; i < ACTOR_COUNT ; ++i)
+    {
+        Actor *act = &actors[i];
+        if (act->room == currentRoom)
+        {
+            int16_t xx = act->x * V12_X_MULTIPLIER + act->ax - offs * 8;
+            if (act->old_anchor)
+            {
+                //DEBUG_PRINTF("Hide %d %d\n", i, act->old_anchor);
+                // switch old sprite off
+                IO_SPRITE_SLOT = act->old_anchor;
+                IO_SPRITE_ATTRIBUTE = 0;
+                IO_SPRITE_ATTRIBUTE = 0;
+                IO_SPRITE_ATTRIBUTE = 0;
+                // invisible
+                IO_SPRITE_ATTRIBUTE = 0x40;
+                IO_SPRITE_ATTRIBUTE = 0x80;
+                anchors[act->old_anchor / COST_SPRITES] = 0;
+                act->old_anchor = 0;
+            }
+            uint8_t anchor = act->anchor;
+            //DEBUG_PRINTF("Show %d %d\n", i, anchor);
+            IO_SPRITE_SLOT = anchor;
+            if (xx < 0 || xx > SCREEN_WIDTH * 8)
+            {
+                IO_SPRITE_ATTRIBUTE = 0;
+                IO_SPRITE_ATTRIBUTE = 0;
+                IO_SPRITE_ATTRIBUTE = 0;
+                // invisible
+                IO_SPRITE_ATTRIBUTE = 0x40 | anchor;
+                IO_SPRITE_ATTRIBUTE = 0x80;
+                continue;
+            }
+            xx += gap * 8;
+            uint8_t y = act->y * V12_Y_MULTIPLIER + act->ay + SCREEN_TOP * 8;
+            IO_SPRITE_ATTRIBUTE = xx;
+            IO_SPRITE_ATTRIBUTE = y;
+            IO_SPRITE_ATTRIBUTE = (xx >> 8) & 1;
+            IO_SPRITE_ATTRIBUTE = 0xc0 | anchor;
+            IO_SPRITE_ATTRIBUTE = 0x80;
+            //DEBUG_PRINTF("Actor %u x=%u y=%u\n", i, xx, y);
+            //graphics_drawActor(actors + i);
+            //a->animateCostume();
+        }
+    }
 
     POP_PAGE(0);
     POP_PAGE(1);

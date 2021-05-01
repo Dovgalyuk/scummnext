@@ -530,7 +530,6 @@ void graphics_clearScreen(void)
         IO_SPRITE_ATTRIBUTE = 0;
         IO_SPRITE_ATTRIBUTE = 0;
         IO_SPRITE_ATTRIBUTE = 0;
-        ++i;
     }
 
     // clear tiles after
@@ -589,52 +588,9 @@ void graphics_updateScreen(void)
         screen += bytegap;
     }
 
-    // draw actors
-    for (i = 0 ; i < ACTOR_COUNT ; ++i)
-    {
-        Actor *act = &actors[i];
-        if (act->room == currentRoom)
-        {
-            xx = act->x * V12_X_MULTIPLIER + act->ax - offs * 8;
-            if (act->old_anchor)
-            {
-                //DEBUG_PRINTF("Clear old sprite %d\n", act->old_anchor);
-                // switch old sprite off
-                IO_SPRITE_SLOT = act->old_anchor;
-                IO_SPRITE_ATTRIBUTE = 0;
-                IO_SPRITE_ATTRIBUTE = 0;
-                IO_SPRITE_ATTRIBUTE = 0;
-                // invisible
-                IO_SPRITE_ATTRIBUTE = 0x40;
-                IO_SPRITE_ATTRIBUTE = 0x80;
-                act->old_anchor = 0;
-            }
-            uint8_t anchor = act->anchor;
-            IO_SPRITE_SLOT = anchor;
-            if (xx < 0 || xx > SCREEN_WIDTH * 8)
-            {
-                IO_SPRITE_ATTRIBUTE = 0;
-                IO_SPRITE_ATTRIBUTE = 0;
-                IO_SPRITE_ATTRIBUTE = 0;
-                // invisible
-                IO_SPRITE_ATTRIBUTE = 0x40 | anchor;
-                IO_SPRITE_ATTRIBUTE = 0x80;
-                continue;
-            }
-            xx += gap * 8;
-            y = act->y * V12_Y_MULTIPLIER + act->ay + SCREEN_TOP * 8;
-            IO_SPRITE_ATTRIBUTE = xx;
-            IO_SPRITE_ATTRIBUTE = y;
-            IO_SPRITE_ATTRIBUTE = (xx >> 8) & 1;
-            IO_SPRITE_ATTRIBUTE = 0xc0 | anchor;
-            IO_SPRITE_ATTRIBUTE = 0x80;
-            //DEBUG_PRINTF("Actor %u x=%u/%u y=%u/%u\n", i, actors[i].x, x, actors[i].y, y);
-            //graphics_drawActor(actors + i);
-            //a->animateCostume();
-        }
-    }
-
     POP_PAGE(0);
+
+    actors_draw(offs, gap);
 }
 
 void graphics_drawObject(Object *obj)
