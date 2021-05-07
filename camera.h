@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 extern uint8_t cameraX;
+extern uint8_t cameraMode;
 
 void camera_move(void);
 

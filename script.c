@@ -40,11 +40,16 @@ static uint8_t curScript;
 static uint8_t opcode;
 static uint8_t exitFlag;
 static uint8_t clickDelay;
+// cutscene variables
+static uint16_t cutSceneData[4];
+static uint8_t cutSceneScript;
+static uint16_t cutScenePtr;
 
 // mapped in MMU1 to pages 32-...
 // can be switched for different scripts
 extern uint8_t scriptBytes[4096];
 extern uint16_t script_id;
+extern uint8_t script_status;
 extern uint8_t script_room;
 extern uint16_t script_roomoffs;
 extern uint16_t script_offset;
@@ -236,6 +241,7 @@ static void pushScript(uint16_t id, uint8_t room, uint16_t roomoffs, uint16_t of
     DEBUG_PRINTF("Starting script %u room %u offset %u in frame %u\n", id, room, roomoffs, s);
     switchScriptPage(s);
     script_id = id;
+    script_status = 0;
     script_room = room;
     script_roomoffs = roomoffs;
     script_offset = offset;
@@ -341,6 +347,76 @@ static void resetSentence(void)
 	scummVars[VAR_SENTENCE_OBJECT1] = 0;
 	scummVars[VAR_SENTENCE_OBJECT2] = 0;
 	scummVars[VAR_SENTENCE_PREPOSITION] = 0;
+}
+
+static void freezeScripts(void)
+{
+    uint8_t i;
+    for (i = 0 ; i < MAX_SCRIPTS ; ++i)
+    {
+        if (i != curScript)
+        {
+            switchScriptPage(i);
+            if (script_id)
+            {
+                script_status = 0x80;
+            }
+        }
+    }
+    switchScriptPage(curScript);
+}
+
+static void unfreezeScripts(void)
+{
+    uint8_t i;
+    for (i = 0 ; i < MAX_SCRIPTS ; ++i)
+    {
+        switchScriptPage(i);
+        script_status &= 0x7f;
+    }
+    switchScriptPage(curScript);
+}
+
+static void setUserState(uint8_t state)
+{
+    // if (state & USERSTATE_SET_IFACE) {			// Userface
+    //     _userState = (_userState & ~USERSTATE_IFACE_ALL) | (state & USERSTATE_IFACE_ALL);
+    // }
+
+    if (state & USERSTATE_SET_FREEZE) {		// Freeze
+        if (state & USERSTATE_FREEZE_ON)
+            freezeScripts();
+        else
+            unfreezeScripts();
+    }
+
+    // Cursor Show/Hide
+    if (state & USERSTATE_SET_CURSOR)
+    {
+        //_userState = (_userState & ~USERSTATE_CURSOR_ON) | (state & USERSTATE_CURSOR_ON);
+        if (state & USERSTATE_CURSOR_ON)
+        {
+            //_userPut = 1;
+            cursor_setState(1);
+        }
+        else
+        {
+            //_userPut = 0;
+            cursor_setState(0);
+        }
+    }
+
+    // // Hide all verbs and inventory
+    // Common::Rect rect;
+    // rect.top = _virtscr[kVerbVirtScreen].topline;
+    // rect.bottom = _virtscr[kVerbVirtScreen].topline + 8 * 88;
+    // rect.right = _virtscr[kVerbVirtScreen].w - 1;
+    //     rect.left = 16;
+    // restoreBackground(rect);
+
+    // Draw all verbs and inventory
+    //redrawVerbs();
+    runInventoryScript(1);
 }
 
 ///////////////////////////////////////////////////////////
@@ -928,25 +1004,25 @@ static void op_stopSound(void)
 static void op_cutscene(void)
 {
     DEBUG_PUTS("cutscene\n");
+
     // TODO
+	cutSceneData[0] = 0;//_userState | (_userPut ? 16 : 0);
+	cutSceneData[1] = scummVars[VAR_CURSORSTATE];
+	cutSceneData[2] = currentRoom;
+	cutSceneData[3] = cameraMode;
 
-	// vm.cutSceneData[0] = _userState | (_userPut ? 16 : 0);
-	// vm.cutSceneData[1] = (int16)VAR(VAR_CURSORSTATE);
-	// vm.cutSceneData[2] = _currentRoom;
-	// vm.cutSceneData[3] = camera._mode;
+	scummVars[VAR_CURSORSTATE] = 200;
 
-	// VAR(VAR_CURSORSTATE) = 200;
-
-	// // Hide inventory, freeze scripts, hide cursor
-	// setUserState(USERSTATE_SET_IFACE |
-	// 	USERSTATE_SET_CURSOR |
-	// 	USERSTATE_SET_FREEZE | USERSTATE_FREEZE_ON);
+	// Hide inventory, freeze scripts, hide cursor
+	setUserState(USERSTATE_SET_IFACE |
+		USERSTATE_SET_CURSOR |
+		USERSTATE_SET_FREEZE | USERSTATE_FREEZE_ON);
 
 	// _sentenceNum = 0;
 	stopScript(SENTENCE_SCRIPT);
 	resetSentence();
 
-	// vm.cutScenePtr[0] = 0;
+	cutScenePtr = 0;
 }
 
 static void op_startScript(void)
@@ -1039,8 +1115,8 @@ static void op_actorFollowCamera(void)
 static void op_beginOverride(void)
 {
     //DEBUG_PUTS("beginOverride\n");
-	// vm.cutScenePtr[0] = _scriptPointer - _scriptOrgPointer;
-	// vm.cutSceneScript[0] = _currentScript;
+	cutScenePtr = script_offset;
+	cutSceneScript = curScript;
 
 	// Skip the jump instruction following the override instruction
 	fetchScriptByte();
@@ -1053,48 +1129,6 @@ static void op_add(void)
 	getResultPos();
 	a = getVarOrDirectWord(PARAM_1);
 	scummVars[script_resultVarNumber] += a;
-}
-
-static void setUserState(uint8_t state)
-{
-    // if (state & USERSTATE_SET_IFACE) {			// Userface
-    //     _userState = (_userState & ~USERSTATE_IFACE_ALL) | (state & USERSTATE_IFACE_ALL);
-    // }
-
-    // if (state & USERSTATE_SET_FREEZE) {		// Freeze
-    //     if (state & USERSTATE_FREEZE_ON)
-    //         freezeScripts(0);
-    //     else
-    //         unfreezeScripts();
-    // }
-
-    // Cursor Show/Hide
-    if (state & USERSTATE_SET_CURSOR)
-    {
-        //_userState = (_userState & ~USERSTATE_CURSOR_ON) | (state & USERSTATE_CURSOR_ON);
-        if (state & USERSTATE_CURSOR_ON)
-        {
-            //_userPut = 1;
-            cursor_setState(1);
-        }
-        else
-        {
-            //_userPut = 0;
-            cursor_setState(0);
-        }
-    }
-
-    // // Hide all verbs and inventory
-    // Common::Rect rect;
-    // rect.top = _virtscr[kVerbVirtScreen].topline;
-    // rect.bottom = _virtscr[kVerbVirtScreen].topline + 8 * 88;
-    // rect.right = _virtscr[kVerbVirtScreen].w - 1;
-    //     rect.left = 16;
-    // restoreBackground(rect);
-
-    // // Draw all verbs and inventory
-    // redrawVerbs();
-    runInventoryScript(1);
 }
 
 static void op_cursorCommand(void)
@@ -1247,12 +1281,11 @@ static void op_endCutscene(void)
 {
     scummVars[VAR_OVERRIDE] = 0;
 
-	// vm.cutSceneStackPointer = 0;
-	// vm.cutSceneScript[0] = 0;
-	// vm.cutScenePtr[0] = 0;
-	// VAR(VAR_CURSORSTATE) = vm.cutSceneData[1];
-	// // Reset user state to values before cutscene
-	// setUserState(vm.cutSceneData[0] | USERSTATE_SET_IFACE | USERSTATE_SET_CURSOR | USERSTATE_SET_FREEZE);
+	cutSceneScript = 0;
+	cutScenePtr = 0;
+	scummVars[VAR_CURSORSTATE] = cutSceneData[1];
+	// Reset user state to values before cutscene
+	setUserState(cutSceneData[0] | USERSTATE_SET_IFACE | USERSTATE_SET_CURSOR | USERSTATE_SET_FREEZE);
 
     camera_followActor(scummVars[VAR_EGO]);
 }
@@ -1835,7 +1868,7 @@ void processScript(void)
     for (curScript = 0 ; curScript < MAX_SCRIPTS ; ++curScript)
     {
         switchScriptPage(curScript);
-        if (script_id)
+        if (script_id && !(script_status & 0x7f))
         {
             //DEBUG_PRINTF("Script %d\n", stack[curScript].id);
             exitFlag = 0;
@@ -1887,6 +1920,19 @@ void runInputScript(uint8_t clickArea, uint16_t val)
     runScript(4);
 }
 
+static void abortCutscene(void)
+{
+	uint16_t offs = cutScenePtr;
+	if (offs) {
+		switchScriptPage(cutSceneScript);
+		script_offset = offs;
+        switchScriptPage(curScript);
+
+		scummVars[VAR_OVERRIDE] = 1;
+		cutScenePtr = 0;
+	}
+}
+
 __sfr __banked __at 0x7ffe IO_7FFE;
 
 void updateScummVars(void)
@@ -1932,10 +1978,19 @@ void updateScummVars(void)
     {
         --clickDelay;
     }
-    else if (!(IO_7FFE & 1))
+    else
     {
-        s = MBS_LEFT_CLICK; 
-        clickDelay = 30;
+        clickDelay = 15;
+        // space button
+        if (!(IO_7FFE & 1))
+        {
+            s = MBS_LEFT_CLICK; 
+        }
+        // M button to skip cutscene
+        else if (!(IO_7FFE & 4))
+        {
+            abortCutscene();
+        }
     }
 	scummVars[VAR_KEYPRESS] = s;
 

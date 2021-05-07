@@ -42,6 +42,8 @@ PUBLIC _scriptBytes
 _scriptBytes: defs 4096, 0
 PUBLIC _script_id
 _script_id: defs 2, 0
+PUBLIC _script_status
+_script_status: defs 1, 0
 PUBLIC _script_room
 _script_room: defs 1, 0
 PUBLIC _script_roomoffs

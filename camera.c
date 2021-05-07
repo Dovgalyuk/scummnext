@@ -12,8 +12,8 @@ enum {
 };
 
 uint8_t cameraX;
+uint8_t cameraMode;
 static uint8_t cameraDestX;
-static uint8_t cameraMode;
 static uint8_t cameraMovingToActor;
 static uint8_t cameraFollows;
 
