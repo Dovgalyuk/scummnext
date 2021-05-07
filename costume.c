@@ -150,13 +150,14 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
             // invisible yet
             IO_SPRITE_ATTRIBUTE = 0x40 | (nextSprite & 0x3f);
             // anchor 4-bit sprite
-            IO_SPRITE_ATTRIBUTE = 0x80;
+            IO_SPRITE_ATTRIBUTE = 0x80 | (nextSprite & 0x40);
         }
         else
         {
+            // visible and enable 5 byte attribyte
             IO_SPRITE_ATTRIBUTE = 0xc0 | (nextSprite & 0x3f);
             // relative sprite
-            IO_SPRITE_ATTRIBUTE = 0x40;
+            IO_SPRITE_ATTRIBUTE = 0x40 | ((nextSprite & 0x40) >> 1);
         }
 
         //DEBUG_PRINTF("Sprite %d tile=%d/%d x=%d y=%d\n", nextSprite, tile, flipped, x, y);
@@ -219,7 +220,7 @@ void costume_updateAll(void)
     for (i = 0 ; i < sizeof(anchors) ; ++i)
         anchors[i] = 0;
 
-    DEBUG_PUTS("Update all costumes\n");
+    //DEBUG_PUTS("Update all costumes\n");
 
     // decode costume sprites
     uint8_t nextSprite = FIRST_SPRITE;
@@ -308,8 +309,9 @@ void actors_draw(uint8_t offs, uint8_t gap)
                 IO_SPRITE_ATTRIBUTE = 0;
                 IO_SPRITE_ATTRIBUTE = 0;
                 // invisible
-                IO_SPRITE_ATTRIBUTE = 0x40 | anchor;
-                IO_SPRITE_ATTRIBUTE = 0x80;
+                IO_SPRITE_ATTRIBUTE = 0x40 | (anchor & 0x3f);
+                // anchor 4-bit sprite
+                IO_SPRITE_ATTRIBUTE = 0x80 | (anchor & 0x40);
                 continue;
             }
             xx += gap * 8;
@@ -317,8 +319,8 @@ void actors_draw(uint8_t offs, uint8_t gap)
             IO_SPRITE_ATTRIBUTE = xx;
             IO_SPRITE_ATTRIBUTE = y;
             IO_SPRITE_ATTRIBUTE = (xx >> 8) & 1;
-            IO_SPRITE_ATTRIBUTE = 0xc0 | anchor;
-            IO_SPRITE_ATTRIBUTE = 0x80;
+            IO_SPRITE_ATTRIBUTE = 0xc0 | (anchor & 0x3f);
+            IO_SPRITE_ATTRIBUTE = 0x80 | (anchor & 0x40);
             //DEBUG_PRINTF("Actor %u x=%u y=%u\n", i, xx, y);
             //graphics_drawActor(actors + i);
             //a->animateCostume();
