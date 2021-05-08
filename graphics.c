@@ -8,6 +8,7 @@
 #include "verbs.h"
 #include "sprites.h"
 #include "string.h"
+#include "script.h"
 #include "helper.h"
 
 #define PAL_SPRITES 0x20
@@ -168,11 +169,11 @@ void decodeNESTrTable(void)
 
 static void updatePalette(HROOM r, uint8_t id)
 {
-    uint8_t i;
+    uint8_t i, c;
     ZXN_WRITE_REG(0x43, id);
     for (i = 0 ; i < 16 ; ++i)
     {
-		uint8_t c = readByte(r);
+		c = readByte(r);
         // TODO: this is for background tiles only
 		// if (c == 0x0D)
 		// 	c = 0x1D;
@@ -192,6 +193,29 @@ static void updatePalette(HROOM r, uint8_t id)
         }
         ZXN_WRITE_REG(0x44, tableNESPalette[c]);
         ZXN_WRITE_REG(0x44, tableNESPalette[c + 1]);
+    }
+
+    // dark palette for the sprites
+    if (id == PAL_SPRITES)
+    {
+    	static const uint8_t darkpalette[16] = {
+            0x00,0x00,0x2D,0x3D,0x00,0x00,0x2D,0x3D,
+            0x00,0x00,0x2D,0x3D,0x00,0x00,0x2D,0x3D
+        };
+        const uint8_t *d = darkpalette;
+        for (i = 16 ; i < 32 ; ++i)
+        {
+            c = *d;
+            ++d;
+            if (c == 0x1D)	// HACK - switch around colors 0x00 and 0x1D
+                c = 0;		// so we don't need a zillion extra checks
+            else if (c == 0)// for determining the proper background color
+                c = 0x1D;
+            c = c * 2;
+            ZXN_WRITE_REG(0x40, i);
+            ZXN_WRITE_REG(0x44, tableNESPalette[c]);
+            ZXN_WRITE_REG(0x44, tableNESPalette[c + 1]);
+        }
     }
 }
 
@@ -567,6 +591,8 @@ void graphics_updateScreen(void)
     }
     offs = camera_getVirtScreenX();
 
+    uint8_t light = scummVars[VAR_CURRENT_LIGHTS] & LIGHTMODE_actor_use_base_palette;
+
     uint8_t bytegap = gap * 2;
     //DEBUG_PRINTF("cameraX=%u roomWidth=%u offs=%u gap=%u\n", cameraX, roomWidth, offs, gap);
     // DEBUG_PRINTF("Screen bytes %x %x\n",
@@ -582,8 +608,20 @@ void graphics_updateScreen(void)
             uint8_t attr = (attributes[((y << 2) & 0x30) | ((x >> 2) & 0xF)]
                 >> (((y & 2) << 1) | (x & 2))) & 0x3;
             /* 2 empty cells at the beginning */
-            *screen++ = nametable[i][offs + j + 2];
-            *screen++ = attr << 4;
+            if (light)
+            {
+                *screen = nametable[i][offs + j + 2];
+                ++screen;
+                *screen = attr << 4;
+                ++screen;
+            }
+            else
+            {
+                *screen = 0;
+                ++screen;
+                *screen = 0;
+                ++screen;
+            }
         }
         screen += bytegap;
     }

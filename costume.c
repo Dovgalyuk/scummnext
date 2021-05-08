@@ -6,6 +6,7 @@
 #include "room.h"
 #include "sprites.h"
 #include "helper.h"
+#include "script.h"
 #include "debug.h"
 
 #define COST_PAGE0 48
@@ -44,6 +45,13 @@ static const uint8_t *getCostume(uint8_t cost)
     return costumesPtr[cost];
 }
 
+static uint8_t getPalOffs(void)
+{
+    if (!(scummVars[VAR_CURRENT_LIGHTS] & LIGHTMODE_actor_use_base_palette))
+        return 1;
+    return 0;
+}
+
 static void decodeNESCostume(Actor *act, uint8_t nextSprite)
 {
     //DEBUG_PRINTF("Decode for %d\n", nextSprite);
@@ -74,6 +82,7 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
     //DEBUG_PRINTF("Decode animation %u/%u of %u frames from %u\n", anim, act->costume, end, begin);
     //DEBUG_ASSERT(end <= MAX_FRAMES, "decodeNESCostume");
     //esx_f_seek(src, begin - 2 * anim - 2, ESX_SEEK_FWD);
+    uint8_t attr2 = getPalOffs() << 4;
 
     act->frames = end;
     uint8_t *sprdata = costdata_id == 31 ? costume31 : costume32;
@@ -141,9 +150,7 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
         y = y - act->ay;
         IO_SPRITE_ATTRIBUTE = x;
         IO_SPRITE_ATTRIBUTE = y;
-        // x is always zero for anchor
-        // for relative this attribute is zero too
-        IO_SPRITE_ATTRIBUTE = 0;//x < 0 ? 1 : 0;
+        IO_SPRITE_ATTRIBUTE = attr2;
 
         if (!spr)
         {
@@ -279,6 +286,7 @@ void actors_draw(uint8_t offs, uint8_t gap)
     PUSH_PAGE(1, COST_PAGE1);
 
     uint8_t i;
+    uint8_t attr2 = getPalOffs() << 4;
     // draw actors
     for (i = 0 ; i < ACTOR_COUNT ; ++i)
     {
@@ -318,7 +326,7 @@ void actors_draw(uint8_t offs, uint8_t gap)
             uint8_t y = act->y * V12_Y_MULTIPLIER + act->ay + SCREEN_TOP * 8;
             IO_SPRITE_ATTRIBUTE = xx;
             IO_SPRITE_ATTRIBUTE = y;
-            IO_SPRITE_ATTRIBUTE = (xx >> 8) & 1;
+            IO_SPRITE_ATTRIBUTE = attr2 | (((uint16_t)xx >> 8) & 1);
             IO_SPRITE_ATTRIBUTE = 0xc0 | (anchor & 0x3f);
             IO_SPRITE_ATTRIBUTE = 0x80 | (anchor & 0x40);
             //DEBUG_PRINTF("Actor %u x=%u y=%u\n", i, xx, y);

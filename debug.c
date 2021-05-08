@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include "debug.h"
 
+#ifdef DEBUG
+
 __sfr __banked __at 0xCF3B DEBUG_PORT;
 __sfr __banked __at 0xDF3B DEBUG_DATA;
 
@@ -111,3 +113,5 @@ void debug_delay(unsigned int n)
     while (n--)
         ++debug_data;
 }
+
+#endif

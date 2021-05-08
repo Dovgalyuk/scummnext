@@ -153,9 +153,6 @@ void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, 
     }
     for (i = 0 ; i < 64 ; ++i)
         IO_SPRITE_PATTERN = 0x0;
-    // second pattern, unused yet
-    // for (i = 0 ; i < 128 ; ++i)
-    //     IO_SPRITE_PATTERN = 0x0;
 
     ZXN_WRITE_MMU0(page);
 }

@@ -8,6 +8,7 @@
 #include "camera.h"
 #include "object.h"
 #include "graphics.h"
+#include "costume.h"
 #include "cursor.h"
 #include "verbs.h"
 #include "engine.h"
@@ -1239,6 +1240,8 @@ static void op_lights(void)
 		//_flashlight.xStrips = a;
 		//_flashlight.yStrips = b;
 	}
+    // redraw all
+    costume_updateAll();
 }
 
 static void op_loadRoom(void)
@@ -1980,7 +1983,7 @@ void updateScummVars(void)
     }
     else
     {
-        clickDelay = 15;
+        clickDelay = 5;
         // space button
         if (!(IO_7FFE & 1))
         {
