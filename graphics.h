@@ -86,7 +86,6 @@ extern uint8_t costdata_id;
 
 void initGraphics(void);
 
-void decodeNESTrTable(void);
 void decodeNESGfx(HROOM r);
 void decodeRoomBackground(HROOM r);
 

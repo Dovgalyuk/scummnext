@@ -32,6 +32,9 @@ int _shadowPaletteSize = 256;
 
 int main()
 {
+    ZXN_NEXTREGA(REG_MACHINE_TYPE, RMT_TIMING_P3E | RMT_P3E);
+    ZXN_NEXTREG(REG_TURBO_MODE, 3/*RTM_14MHZ*/); // 28MHz
+
     // init memory bank 0-16k
     ZXN_WRITE_MMU0(3);
     //ZXN_WRITE_MMU1(32);
@@ -55,7 +58,7 @@ int main()
         // HROOM c = seekResource(&costumes[i]);
         // uint16_t sz = readWord(c);
         // closeRoom(c);
-        //DEBUG_PRINTF("costume %u room %u offs %u size %u\n", i, costumes[i].room, costumes[i].roomoffs, sz);
+        // DEBUG_PRINTF("costume %u room %u offs %u size %u\n", i, costumes[i].room, costumes[i].roomoffs, sz);
 	}
 
 	for (i = 0; i < _numScripts; i++) {
@@ -72,8 +75,7 @@ int main()
 
     initGraphics();
 
-    // NES charset
-    decodeNESTrTable();
+    // NES base tiles
     decodeTiles(0);
 
     // boot script

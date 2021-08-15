@@ -64,6 +64,7 @@ SECTION PAGE_48
 
 PUBLIC _costume31
 _costume31: defs 8192, 0
+; _costume31: defs 11234, 0
 
 SECTION PAGE_49
 
@@ -84,6 +85,15 @@ _actCostumesUsed: defw 0
 PUBLIC _anchors
 _anchors: defs 6, 0
 
+; PUBLIC _costdesc
+; _costdesc: defs 51, 0
+
+; PUBLIC _costlens
+; _costlens: defs 279, 0
+
+; PUBLIC _costoffs
+; _costoffs: defs 556, 0
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; graphics page
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -93,5 +103,5 @@ PUBLIC _nametable
 _nametable: defs 1024, 0
 PUBLIC _attributes
 _attributes: defs 64, 0
-PUBLIC _translationTable
-_translationTable: defs 256, 0
+; PUBLIC _translationTable
+; _translationTable: defs 256, 0

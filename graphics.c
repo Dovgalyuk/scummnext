@@ -17,7 +17,7 @@
 #define GRAPH_PAGE 50
 extern uint8_t nametable[16][64];
 extern uint8_t attributes[64];
-extern uint8_t translationTable[256];
+extern uint8_t translationTable[];
 
 // costume set
 uint8_t costdesc[51];
@@ -150,20 +150,6 @@ void initGraphics(void)
     }
 
     // // DEBUG_PUTS("End setup\n");
-}
-
-void decodeNESTrTable(void)
-{
-    PUSH_PAGE(0, GRAPH_PAGE);
-
-    HROOM r = seekResource(&costumes[77]);
-    uint8_t size = readWord(r);
-    //DEBUG_PRINTF("NES translation table size %u\n", size);
-    for (uint8_t i = 0 ; i < size - 2 ; ++i)
-        translationTable[i + ' '] = readByte(r);
-    closeRoom(r);
-
-    POP_PAGE(0);
 }
 
 
@@ -497,7 +483,7 @@ void graphics_printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t left, ui
             DEBUG_HALT;
         }
         //DEBUG_PRINTF("char %u pattern %u\n", *s, translationTable[*s]);
-        *screen++ = translationTable[c];
+        *screen++ = translationTable[c - ' '];
         *screen++ = color << 4;
         ++x;
         // if (x >= LINE_WIDTH - gap)

@@ -37,6 +37,7 @@ void closeRoom(HROOM r)
 
 HROOM seekResource(Resource *res)
 {
+    //DEBUG_PRINTF("seek res %d %d\n", res->room, res->roomoffs);
     HROOM f = openRoom(res->room);
     esx_f_seek(f, res->roomoffs, ESX_SEEK_SET);
 
@@ -56,6 +57,7 @@ void readBuffer(HROOM r, uint8_t *buf, uint16_t sz)
 uint16_t readResource(HROOM r, uint8_t *buf, uint16_t sz)
 {
     uint16_t size = readWord(r);
+    //DEBUG_PRINTF("read res %d into buf %d\n", size, sz);
     uint16_t i;
     if (size > sz)
     {

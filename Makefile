@@ -1,5 +1,5 @@
 CFILES = $(wildcard *.c)
-ASMFILES = $(wildcard *.asm)
+ASMFILES = $(wildcard *.asm) $(wildcard gen/*.asm)
 OFILES = $(CFILES:.c=.o) $(ASMFILES:.asm=.o)
 
 PROGRAM = scummnext.nex

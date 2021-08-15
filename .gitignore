@@ -5,3 +5,5 @@ MM/*
 *.o
 *.lis
 zcc_opt.def
+gen/*
+__pycache__
