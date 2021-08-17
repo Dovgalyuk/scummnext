@@ -4,6 +4,7 @@
 #include "room.h"
 #include "resource.h"
 #include "debug.h"
+#include "helper.h"
 
 static uint8_t baseTilesCount;
 //uint8_t spriteTiles[4096];
@@ -12,6 +13,7 @@ extern uint8_t spriteTiles[4096];
 extern uint8_t tileBuf[4096];
 
 #define BUF_PAGE 2
+#define TILEMAP_PAGE 10
 
 static uint16_t decodeNESTileData(uint8_t *buf, HROOM f, uint16_t len)
 {
@@ -57,13 +59,14 @@ static uint16_t decodeNESTileData(uint8_t *buf, HROOM f, uint16_t len)
 
 static void setTiles(uint16_t count)
 {
-    uint8_t *tiles = (uint8_t*)TILE_BASE + baseTilesCount * 32;
-    //uint8_t *screen = (uint8_t*)TILEMAP_BASE;
+    PUSH_PAGE(0, TILEMAP_PAGE);
+    uint8_t *tiles = (uint8_t*)0 + baseTilesCount * 32;
+    //uint8_t *tiles = (uint8_t*)TILE_BASE + baseTilesCount * 32;
     if (!baseTilesCount)
         baseTilesCount = count;
     for (uint16_t c = 0 ; c < count ; ++c)
     {
-        // if (c == 2)
+        //if (c < 2)
         //DEBUG_PRINTF("Tile %u:\n", c);
         for (uint8_t i = 0 ; i < 8 ; ++i)
         {
@@ -75,18 +78,22 @@ static void setTiles(uint16_t count)
                 ++j;
                 uint8_t col2 = ((c0 >> (7 - j)) & 1) + (((c1 >> (7 - j)) & 1) << 1);
                 uint8_t b = (col1 << 4) | col2;
-                *tiles++ = b;
-                // if (c == 2)
-                //DEBUG_PRINTF("%x%x", col1, col2);
+                *tiles = b;
+                ++tiles;
+                // if (c == 1)
+                // //DEBUG_PRINTF("%x%x", col1, col2);
+                // DEBUG_PRINTF("%x %x ", tiles, b);
             }
-            //DEBUG_PUTS("\n");
+            // DEBUG_PUTS("\n");
         }
-        // if (c == 2)
-        //DEBUG_PUTS("\n");
+        // if (c == 1)
+        // DEBUG_PUTS("\n");
         //*screen++ = c;
     }
+    POP_PAGE(0);
 }
 
+// Buffer should be in page >= 2
 static uint16_t decodeNESTiles(uint8_t *buf, uint8_t set)
 {
     HROOM f = seekResource(&costumes[set]);
@@ -102,16 +109,14 @@ static uint16_t decodeNESTiles(uint8_t *buf, uint8_t set)
 
 void decodeSpriteTiles(uint8_t set)
 {
-    uint8_t page = ZXN_READ_MMU0();
-    ZXN_WRITE_MMU0(BUF_PAGE);
+    PUSH_PAGE(2, BUF_PAGE);
     decodeNESTiles(spriteTiles, set);
-    ZXN_WRITE_MMU0(page);
+    POP_PAGE(2);
 }
 
 void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, uint8_t sprpal)
 {
-    uint8_t page = ZXN_READ_MMU0();
-    ZXN_WRITE_MMU0(BUF_PAGE);
+    PUSH_PAGE(2, BUF_PAGE);
 
     uint8_t spr = (nextSprite & 0x3f) | ((nextSprite & 0x40) << 1);
 
@@ -154,14 +159,13 @@ void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, 
     for (i = 0 ; i < 64 ; ++i)
         IO_SPRITE_PATTERN = 0x0;
 
-    ZXN_WRITE_MMU0(page);
+    POP_PAGE(2);
 }
 
 void decodeTiles(uint8_t set)
 {
     DEBUG_PRINTF("Decoding tiles set %u\n", set);
-    uint8_t page = ZXN_READ_MMU0();
-    ZXN_WRITE_MMU0(BUF_PAGE);
+    PUSH_PAGE(2, BUF_PAGE);
     setTiles(decodeNESTiles(tileBuf, 37 + set));
-    ZXN_WRITE_MMU0(page);
+    POP_PAGE(2);
 }

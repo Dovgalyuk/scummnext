@@ -14,7 +14,8 @@
 #define PAL_SPRITES 0x20
 #define PAL_TILES   0x30
 
-#define GRAPH_PAGE 50
+#define GRAPH_PAGE 3
+//#define SCREEN_PAGE 11
 extern uint8_t nametable[16][64];
 extern uint8_t attributes[64];
 extern uint8_t translationTable[];
@@ -207,7 +208,7 @@ static void updatePalette(HROOM r, uint8_t id)
 
 void decodeRoomBackground(HROOM r)
 {
-    PUSH_PAGE(0, GRAPH_PAGE);
+    PUSH_PAGE(2, GRAPH_PAGE);
 
     esx_f_seek(r, 0xa, ESX_SEEK_SET);
     uint16_t gdata = readWord(r);
@@ -217,6 +218,7 @@ void decodeRoomBackground(HROOM r)
     uint8_t i, j;
     uint16_t n;
     uint8_t data = readByte(r);
+    //DEBUG_PUTS("nametable:\n");
     for (i = 0 ; i < 16 ; ++i)
     {
         nametable[i][0] = nametable[i][1] = 0;
@@ -226,6 +228,7 @@ void decodeRoomBackground(HROOM r)
             uint8_t next = readByte(r);
 			for (j = 0 ; j < (data & 0x7F) ; j++)
             {
+                //if (i == 0) DEBUG_PRINTF("%x ", next);
                 nametable[i][2 + n++] = next;
                 if (data & 0x80)
                     next = readByte(r);
@@ -236,6 +239,7 @@ void decodeRoomBackground(HROOM r)
 		}
 		nametable[i][roomWidth + 2] = nametable[i][roomWidth + 3] = 0;
     }
+    //DEBUG_PUTS("\n");
     // decode attributes
     esx_f_seek(r, 0xc, ESX_SEEK_SET);
     uint16_t adata = readWord(r);
@@ -257,7 +261,7 @@ void decodeRoomBackground(HROOM r)
 	}
     // decode masktable
 
-    POP_PAGE(0);
+    POP_PAGE(2);
 }
 
 void decodeNESGfx(HROOM r)
@@ -327,7 +331,7 @@ static void decodeNESObject(Object *obj)
     HROOM r = openRoom(currentRoom);
     esx_f_seek(r, obj->OBIMoffset, ESX_SEEK_SET);
 
-    PUSH_PAGE(0, GRAPH_PAGE);
+    PUSH_PAGE(2, GRAPH_PAGE);
     uint8_t len = readByte(r);
     for (uint8_t y = 0 ; y < h ; ++y)
     {
@@ -411,12 +415,13 @@ static void decodeNESObject(Object *obj)
 
     closeRoom(r);
 
-    POP_PAGE(0);
+    POP_PAGE(2);
 }
 
 static void clearLine(uint8_t y)
 {
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + LINE_BYTES * y;
+    //uint8_t *screen = (uint8_t*)0 + LINE_BYTES * y;
     uint8_t *end = screen + LINE_BYTES;
     while (screen != end)
     {
@@ -436,17 +441,21 @@ static void clearTalkArea(void)
 
 void graphics_clearInventory(void)
 {
+    //PUSH_PAGE(0, SCREEN_PAGE);
     uint8_t i;
     for (i = 0 ; i < INV_ROWS ; ++i)
         clearLine(INV_TOP + i);
+    //POP_PAGE(0);
 }
 
 
 void graphics_printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t left, uint8_t color, uint8_t len)
 {
-    PUSH_PAGE(0, GRAPH_PAGE);
+    //PUSH_PAGE(0, SCREEN_PAGE);
+    PUSH_PAGE(2, GRAPH_PAGE);
 
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + x * TILE_BYTES + y * LINE_BYTES;
+    //uint8_t *screen = (uint8_t*)0 + x * TILE_BYTES + y * LINE_BYTES;
     uint8_t curpos = 0;
     while (*s)
     {
@@ -493,22 +502,27 @@ void graphics_printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t left, ui
         // }
     }
 
-    POP_PAGE(0);
+    POP_PAGE(2);
+    //POP_PAGE(0);
 }
 
 void graphics_print(const char *s, uint8_t c)
 {
+    //PUSH_PAGE(0, SCREEN_PAGE);
     clearTalkArea();
     // TODO: correct color
     c = 3;
     graphics_printAtXY(s, TEXT_GAP, 0, TEXT_GAP, c, SCREEN_WIDTH);
+    //POP_PAGE(0);
 }
 
 void graphics_printSentence(const char *s)
 {
+    //PUSH_PAGE(0, SCREEN_PAGE);
     clearLine(SCREEN_HEIGHT + SCREEN_TOP);
     // color offset 3 to match transparent color
     graphics_printAtXY(s, TEXT_GAP, SCREEN_HEIGHT + SCREEN_TOP, TEXT_GAP, 3, SCREEN_WIDTH);
+    //POP_PAGE(0);
 }
 
 void graphics_drawVerb(VerbSlot *v)
@@ -542,14 +556,17 @@ void graphics_clearScreen(void)
         IO_SPRITE_ATTRIBUTE = 0;
     }
 
+    //PUSH_PAGE(0, SCREEN_PAGE);
     // clear tiles after
     for (i = 0 ; i < SCREEN_TOP + SCREEN_HEIGHT ; ++i)
         clearLine(i);
+    //POP_PAGE(0);
 }
 
 void graphics_updateScreen(void)
 {
-    PUSH_PAGE(0, GRAPH_PAGE);
+    //PUSH_PAGE(0, SCREEN_PAGE);
+    PUSH_PAGE(2, GRAPH_PAGE);
 
     //DEBUG_PRINTF("Draw nametable %x\n", nametable[15][2]);
 
@@ -566,6 +583,7 @@ void graphics_updateScreen(void)
 
     // update background picture
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + SCREEN_TOP * LINE_BYTES;
+    //uint8_t *screen = (uint8_t*)0 + SCREEN_TOP * LINE_BYTES;
 
     uint8_t gap = LINE_GAP;
     uint8_t offs;
@@ -582,8 +600,8 @@ void graphics_updateScreen(void)
     uint8_t bytegap = gap * 2;
     //DEBUG_PRINTF("cameraX=%u roomWidth=%u offs=%u gap=%u\n", cameraX, roomWidth, offs, gap);
     // DEBUG_PRINTF("Screen bytes %x %x\n",
-    //     nametable[SCREEN_HEIGHT - 1][2],
-    //     nametable[SCREEN_HEIGHT - 1][offs + 2]);
+    //      nametable[0][2],
+    //      nametable[0][offs + 2]);
     for (i = 0 ; i < SCREEN_HEIGHT ; ++i)
     {
         screen += bytegap;
@@ -596,6 +614,7 @@ void graphics_updateScreen(void)
             /* 2 empty cells at the beginning */
             if (light)
             {
+                //if (i == 0) DEBUG_PRINTF("%x ", nametable[i][offs + j + 2]);
                 *screen = nametable[i][offs + j + 2];
                 ++screen;
                 *screen = attr << 4;
@@ -611,8 +630,10 @@ void graphics_updateScreen(void)
         }
         screen += bytegap;
     }
+    //DEBUG_PUTS("\n");
 
-    POP_PAGE(0);
+    POP_PAGE(2);
+    //POP_PAGE(0);
 
     actors_draw(offs, gap);
 }

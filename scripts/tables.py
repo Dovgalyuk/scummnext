@@ -17,7 +17,7 @@ fin = utils.openCostume(path, 77)
 
 tables = open("gen/tables.asm", "w")
 tables.write("; Translation table\n")
-tables.write("SECTION PAGE_50\n")
+tables.write("SECTION PAGE_3\n")
 tables.write("PUBLIC _translationTable\n")
 tables.write("_translationTable: defb")
 for i in range(0, utils.readWord(fin)):

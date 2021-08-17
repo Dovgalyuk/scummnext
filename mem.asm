@@ -34,6 +34,16 @@ PUBLIC _inventoryOffset
 _inventoryOffset: defs 1, 0
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; graphics page
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+SECTION PAGE_3
+
+PUBLIC _nametable
+_nametable: defs 1024, 0
+PUBLIC _attributes
+_attributes: defs 64, 0
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; page structure for scipts
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 SECTION PAGE_32 ;; to page 47
@@ -68,6 +78,7 @@ _costume31: defs 8192, 0
 
 SECTION PAGE_49
 
+PUBLIC _costume31_tail
 _costume31_tail: defs (11234-8192), 0
 
 PUBLIC _costume32
@@ -94,14 +105,3 @@ _anchors: defs 6, 0
 ; PUBLIC _costoffs
 ; _costoffs: defs 556, 0
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; graphics page
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-SECTION PAGE_50
-
-PUBLIC _nametable
-_nametable: defs 1024, 0
-PUBLIC _attributes
-_attributes: defs 64, 0
-; PUBLIC _translationTable
-; _translationTable: defs 256, 0

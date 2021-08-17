@@ -3,12 +3,11 @@
 #pragma output CRT_ORG_CODE = 0x6a00
 
 // pages for buffers
-#pragma output CRT_ORG_PAGE_2 = 0x0000
-#pragma output CRT_ORG_PAGE_3 = 0x0000
+#pragma output CRT_ORG_PAGE_2 = 0x4000
+#pragma output CRT_ORG_PAGE_3 = 0x4000
 #pragma output CRT_ORG_PAGE_32 = 0x2000
-#pragma output CRT_ORG_PAGE_48 = 0x0000
-#pragma output CRT_ORG_PAGE_49 = 0x2000
-#pragma output CRT_ORG_PAGE_50 = 0x0000
+#pragma output CRT_ORG_PAGE_48 = 0x4000
+#pragma output CRT_ORG_PAGE_49 = 0x4000
 
 // stack location
 

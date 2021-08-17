@@ -1,1 +1,1 @@
-../zesarux-origin/src/zesarux --mmc-file /home/pasha/ZXNext/SD/tbblue.mmc --enable-mmc --enable-divmmc-ports --machine tbblue --quickexit --verbose 3 --enable-esxdos-handler --hardware-debug-ports --nowelcomemessage scummnext.nex
+../zesarux-origin/src/zesarux --machine tbblue --enable-esxdos-handler --hardware-debug-ports --nowelcomemessage scummnext.nex

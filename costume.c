@@ -15,7 +15,8 @@
 #define COST_SPRITES 16
 #define FIRST_SPRITE 1
 
-extern uint8_t costume31[11234];
+extern uint8_t costume31[8192];
+extern uint8_t costume31_tail[11234];
 extern uint8_t costume32[140];
 extern uint8_t actCostumes[2048];
 extern uint8_t *costumesPtr[_numCostumes];
@@ -52,6 +53,7 @@ static uint8_t getPalOffs(void)
     return 0;
 }
 
+// should be called with MMU2=COST_PAGE1
 static void decodeNESCostume(Actor *act, uint8_t nextSprite)
 {
     //DEBUG_PRINTF("Decode for %d\n", nextSprite);
@@ -85,7 +87,6 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
     uint8_t attr2 = getPalOffs() << 4;
 
     act->frames = end;
-    uint8_t *sprdata = costdata_id == 31 ? costume31 : costume32;
     uint8_t flipped = act->facing == 1;
     uint8_t frame = cost[begin + act->curpos];//*cost++;//readByte(src);
 
@@ -98,6 +99,13 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
     uint16_t sprOffs = READ_LE_UINT16(costoffs + 2 * (offset + frame) + 2) + 2;
     //DEBUG_PRINTF("decode frame=%u numspr=%u offset=%u\n", frame, numSprites, offset);
     //esx_f_seek(sprdata, sprOffs, ESX_SEEK_FWD);
+
+    uint8_t *sprdata = costume32;
+    if (costdata_id == 31)
+    {
+        sprdata = costume31;
+        ZXN_WRITE_MMU2(COST_PAGE0);
+    }
     uint8_t *sprite = sprdata + sprOffs;
 
     // bool flipped = (newDirToOldDir(a->getFacing()) == 1);
@@ -109,12 +117,23 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
     // setup anchor and relative sprite attributes and patterns
     DEBUG_ASSERT(numSprites <= COST_SPRITES, "COST_SPRITES");
 
+#define inc_sprite do { \
+        ++sprite; \
+        if ((uint16_t)sprite >= 0x6000) { \
+            sprite -= 0x2000; \
+            ZXN_WRITE_MMU2(COST_PAGE1); \
+        } \
+    } while (0)
+
     uint8_t spr;
     for (spr = 0 ; spr < numSprites ; spr++)
     {
-        uint8_t d0 = *sprite++;
-        uint8_t d1 = *sprite++;
-        uint8_t d2 = *sprite++;
+        uint8_t d0 = *sprite;
+        inc_sprite;
+        uint8_t d1 = *sprite;
+        inc_sprite;
+        uint8_t d2 = *sprite;
+        inc_sprite;
         uint8_t mask;
         uint8_t sprpal = 0;
         int8_t y, x;
@@ -171,7 +190,7 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
 
         ++nextSprite;
     }
-
+#undef inc_sprite
     // clean other sprites in the slot
     while (spr < COST_SPRITES)
     {
@@ -183,23 +202,31 @@ static void decodeNESCostume(Actor *act, uint8_t nextSprite)
         ++nextSprite;
         ++spr;
     }
+
+    ZXN_WRITE_MMU2(COST_PAGE1);
 }
 
 void costume_loadData(void)
 {
-    PUSH_PAGE(0, COST_PAGE0);
-    PUSH_PAGE(1, COST_PAGE1);
+    PUSH_PAGE(2, COST_PAGE0);
 
     HROOM cost = seekResource(&costumes[31]);
-    readResource(cost, costume31, sizeof(costume31));
+    //readResource(cost, costume31, sizeof(costume31));
+    uint16_t size = readWord(cost);
+    esx_f_seek(cost, 2, ESX_SEEK_BWD);
+    readBuffer(cost, costume31, sizeof(costume31));
+    size -= sizeof(costume31);
+
+    ZXN_WRITE_MMU2(COST_PAGE1);
+
+    readBuffer(cost, costume31_tail, size);
     closeRoom(cost);
 
     cost = seekResource(&costumes[32]);
     readResource(cost, costume32, sizeof(costume32));
     closeRoom(cost);
 
-    POP_PAGE(0);
-    POP_PAGE(1);
+    POP_PAGE(2);
 }
 
 void costume_updateAll(void)
@@ -221,8 +248,7 @@ void costume_updateAll(void)
         // some hack for cursor id
         costdata_id == 32 ? 0xfe : 0xfa, 0x80, 1);
 
-    PUSH_PAGE(0, COST_PAGE0);
-    PUSH_PAGE(1, COST_PAGE1);
+    PUSH_PAGE(2, COST_PAGE1);
 
     for (i = 0 ; i < sizeof(anchors) ; ++i)
         anchors[i] = 0;
@@ -245,14 +271,12 @@ void costume_updateAll(void)
         }
     }
 
-    POP_PAGE(0);
-    POP_PAGE(1);
+    POP_PAGE(2);
 }
 
 void costume_updateActor(Actor *act)
 {
-    PUSH_PAGE(0, COST_PAGE0);
-    PUSH_PAGE(1, COST_PAGE1);
+    PUSH_PAGE(2, COST_PAGE1);
 
     uint8_t anchor = act->anchor;
     uint8_t a = 0;
@@ -276,14 +300,12 @@ void costume_updateActor(Actor *act)
 
     //DEBUG_PRINTF("Update costume old=%d new=%d\n", anchor, FIRST_SPRITE + a * COST_SPRITES);
 
-    POP_PAGE(0);
-    POP_PAGE(1);
+    POP_PAGE(2);
 }
 
 void actors_draw(uint8_t offs, uint8_t gap)
 {
-    PUSH_PAGE(0, COST_PAGE0);
-    PUSH_PAGE(1, COST_PAGE1);
+    PUSH_PAGE(2, COST_PAGE1);
 
     uint8_t i;
     uint8_t attr2 = getPalOffs() << 4;
@@ -335,6 +357,5 @@ void actors_draw(uint8_t offs, uint8_t gap)
         }
     }
 
-    POP_PAGE(0);
-    POP_PAGE(1);
+    POP_PAGE(2);
 }
