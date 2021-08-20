@@ -35,8 +35,8 @@ int main()
     ZXN_NEXTREGA(REG_MACHINE_TYPE, RMT_TIMING_P3E | RMT_P3E);
     ZXN_NEXTREG(REG_TURBO_MODE, 3/*RTM_14MHZ*/); // 28MHz
 
-    // page for objects
-    ZXN_WRITE_MMU2(3);
+    // page for scripts
+    ZXN_WRITE_MMU2(32);
 
     int i;
     HROOM f = openRoom(0);

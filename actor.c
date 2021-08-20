@@ -451,10 +451,8 @@ void actors_animate(void)
 
 void actor_walkToObject(uint8_t actor, uint16_t obj_id)
 {
-    Object *obj = object_get(obj_id);
-	// int x, y, dir;
-    uint8_t x = obj->walk_x;
-    uint8_t y = obj->walk_y;
+    uint8_t x, y;
+    object_getXY(obj_id, &x, &y);
 	// getObjectXYPos(obj, x, y, dir);
 
     // TODO: calculate direction

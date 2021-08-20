@@ -4,8 +4,8 @@ Supports only Maniac Mansion from NES.
 
 Memory map:
 
-* 0x0000 - Data buffers (pages 2,3)
-* 0x4000 - Tiles
+* 0x0000 - ROM, Also used for temporary mapping of other pages
+* 0x4000 - Page for mapping data
 * 0x6000 - Tilemap
 * 0x6a00 - code
 
@@ -19,9 +19,9 @@ Memory map:
 Pages map:
 
 * 2 - tile data
-* 3 - object data
-* 32-43 - scripts
-* 44, 45 - costumes 31 and 32 with sprite data
+* 3 - object data, some graphics data
+* 32-47 - scripts
+* 48, 49 - costumes 31 and 32 with sprite data
 
 Resource info:
 

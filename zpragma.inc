@@ -5,7 +5,7 @@
 // pages for buffers
 #pragma output CRT_ORG_PAGE_2 = 0x4000
 #pragma output CRT_ORG_PAGE_3 = 0x4000
-#pragma output CRT_ORG_PAGE_32 = 0x2000
+#pragma output CRT_ORG_PAGE_32 = 0x4000
 #pragma output CRT_ORG_PAGE_48 = 0x4000
 #pragma output CRT_ORG_PAGE_49 = 0x4000
 

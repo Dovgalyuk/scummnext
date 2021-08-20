@@ -96,7 +96,7 @@ void graphics_clearInventory(void);
 void graphics_loadCostumeSet(uint8_t n);
 void graphics_print(const char *s, uint8_t c);
 void graphics_printSentence(const char *s);
-void graphics_drawObject(Object *obj);
+void graphics_drawObject(uint16_t bimoffs, uint8_t ox, uint8_t oy, uint8_t w, uint8_t h);
 void graphics_drawVerb(VerbSlot *v);
 void graphics_drawInventory(uint8_t slot, const char *s);
 void graphics_printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t left, uint8_t color, uint8_t len);

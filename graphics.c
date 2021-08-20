@@ -319,105 +319,6 @@ void graphics_loadCostumeSet(uint8_t n)
     closeRoom(r);
 }
 
-static void decodeNESObject(Object *obj)
-{
-    uint8_t w = obj->width;
-    uint8_t h = obj->height;
-    uint8_t oy = obj->y;
-    uint8_t ox = obj->x;
-
-    //DEBUG_PRINTF("--- decode object ox=%u oy=%u w=%u h=%u\n", ox, oy, w, h);
-
-    HROOM r = openRoom(currentRoom);
-    esx_f_seek(r, obj->OBIMoffset, ESX_SEEK_SET);
-
-    PUSH_PAGE(2, GRAPH_PAGE);
-    uint8_t len = readByte(r);
-    for (uint8_t y = 0 ; y < h ; ++y)
-    {
-        uint8_t x = 0;
-        while (x < w)
-        {
-            uint8_t next = readByte(r);
-            for (uint8_t i = 0 ; i < (len & 0x7f) ; ++i)
-            {
-                // DEBUG_PRINTF("%x ", next);
-                nametable[oy + y][x + ox + 2] = next;
-                if (len & 0x80)
-                    next = readByte(r);
-                ++x;
-            }
-            if (!(len & 0x80))
-                next = readByte(r);
-            len = next;
-        }
-        // DEBUG_PUTS("\n");
-    }
-
-    // decode attribute update data
-    uint8_t y = h / 2;
-    uint8_t ay = oy;
-	while (y)
-    {
-		uint8_t ax = ox + 2;
-		uint8_t x = 0;
-		uint8_t adata = 0;
-		while (x < (w >> 1))
-        {
-			if (!(x & 3))
-				adata = readByte(r);
-			uint8_t *dest = &attributes[((ay << 2) & 0x30) | ((ax >> 2) & 0xF)];
-
-			uint8_t aand = 3;
-			uint8_t aor = adata & 3;
-			if (ay & 0x02)
-            {
-				aand <<= 4;
-				aor <<= 4;
-			}
-			if (ax & 0x02)
-            {
-				aand <<= 2;
-				aor <<= 2;
-			}
-			*dest = ((~aand) & *dest) | aor;
-
-			adata >>= 2;
-			ax += 2;
-			x++;
-		}
-		ay += 2;
-		y--;
-	}
-
-	// decode mask update data
-	// if (!_NES.hasmask)
-	// 	return;
-	// int mx, mwidth;
-	// int lmask, rmask;
-	// mx = *ptr++;
-	// mwidth = *ptr++;
-	// lmask = *ptr++;
-	// rmask = *ptr++;
-
-	// for (y = 0; y < height; ++y) {
-	// 	byte *dest = &_NES.masktableObj[y + ypos][mx];
-	// 	*dest = (*dest & lmask) | *ptr++;
-	// 	dest++;
-	// 	for (x = 1; x < mwidth; x++) {
-	// 		if (x + 1 == mwidth)
-	// 			*dest = (*dest & rmask) | *ptr++;
-	// 		else
-	// 			*dest = *ptr++;
-	// 		dest++;
-	// 	}
-	// }
-
-    closeRoom(r);
-
-    POP_PAGE(2);
-}
-
 static void clearLine(uint8_t y)
 {
     uint8_t *screen = (uint8_t*)TILEMAP_BASE + LINE_BYTES * y;
@@ -638,12 +539,101 @@ void graphics_updateScreen(void)
     actors_draw(offs, gap);
 }
 
-void graphics_drawObject(Object *obj)
+void graphics_drawObject(uint16_t bimoffs, uint8_t ox, uint8_t oy, uint8_t w, uint8_t h)
 {
-    if (!obj->OBIMoffset)
+    if (!bimoffs)
         return;
-    // TODO: room?
-    decodeNESObject(obj);
+
+    //DEBUG_PRINTF("--- decode object ox=%u oy=%u w=%u h=%u\n", ox, oy, w, h);
+
+    HROOM r = openRoom(currentRoom);
+    esx_f_seek(r, bimoffs, ESX_SEEK_SET);
+
+    PUSH_PAGE(2, GRAPH_PAGE);
+    uint8_t len = readByte(r);
+    for (uint8_t y = 0 ; y < h ; ++y)
+    {
+        uint8_t x = 0;
+        while (x < w)
+        {
+            uint8_t next = readByte(r);
+            for (uint8_t i = 0 ; i < (len & 0x7f) ; ++i)
+            {
+                // DEBUG_PRINTF("%x ", next);
+                nametable[oy + y][x + ox + 2] = next;
+                if (len & 0x80)
+                    next = readByte(r);
+                ++x;
+            }
+            if (!(len & 0x80))
+                next = readByte(r);
+            len = next;
+        }
+        // DEBUG_PUTS("\n");
+    }
+
+    // decode attribute update data
+    uint8_t y = h / 2;
+    uint8_t ay = oy;
+	while (y)
+    {
+		uint8_t ax = ox + 2;
+		uint8_t x = 0;
+		uint8_t adata = 0;
+		while (x < (w >> 1))
+        {
+			if (!(x & 3))
+				adata = readByte(r);
+			uint8_t *dest = &attributes[((ay << 2) & 0x30) | ((ax >> 2) & 0xF)];
+
+			uint8_t aand = 3;
+			uint8_t aor = adata & 3;
+			if (ay & 0x02)
+            {
+				aand <<= 4;
+				aor <<= 4;
+			}
+			if (ax & 0x02)
+            {
+				aand <<= 2;
+				aor <<= 2;
+			}
+			*dest = ((~aand) & *dest) | aor;
+
+			adata >>= 2;
+			ax += 2;
+			x++;
+		}
+		ay += 2;
+		y--;
+	}
+
+	// decode mask update data
+	// if (!_NES.hasmask)
+	// 	return;
+	// int mx, mwidth;
+	// int lmask, rmask;
+	// mx = *ptr++;
+	// mwidth = *ptr++;
+	// lmask = *ptr++;
+	// rmask = *ptr++;
+
+	// for (y = 0; y < height; ++y) {
+	// 	byte *dest = &_NES.masktableObj[y + ypos][mx];
+	// 	*dest = (*dest & lmask) | *ptr++;
+	// 	dest++;
+	// 	for (x = 1; x < mwidth; x++) {
+	// 		if (x + 1 == mwidth)
+	// 			*dest = (*dest & rmask) | *ptr++;
+	// 		else
+	// 			*dest = *ptr++;
+	// 		dest++;
+	// 	}
+	// }
+
+    closeRoom(r);
+
+    POP_PAGE(2);
 }
 
 uint8_t graphics_findVirtScreen(uint8_t y)

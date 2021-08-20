@@ -79,7 +79,7 @@ static uint8_t sentenceNum;
 static void switchScriptPage(uint8_t s)
 {
     //DEBUG_PRINTF("Select page %u\n", FIRST_BANK + s);
-    ZXN_WRITE_MMU1(FIRST_BANK + s);
+    ZXN_WRITE_MMU2(FIRST_BANK + s);
 }
 
 static void loadScriptBytes(void)
@@ -472,9 +472,6 @@ static void op_drawObject(void)
 	ypos = getVarOrDirectByte(PARAM_3);
     DEBUG_PRINTF("Draw object %u at %u,%u\n", idx, xpos, ypos);
 
-    Object *obj = object_get(idx);
-    //DEBUG_ASSERT(obj, "op_drawObject");
-
 	if (xpos != 0xFF)
     {
         DEBUG_PUTS("TODO: drawing object at coordinates\n");
@@ -484,7 +481,7 @@ static void op_drawObject(void)
 	// 	od->walk_y += (ypos * 8) - od->y_pos;
 	// 	od->y_pos = ypos * 8;
 	}
-	graphics_drawObject(obj);
+	object_draw(idx);
 
 	// x = od->x_pos;
 	// y = od->y_pos;
@@ -565,8 +562,8 @@ static void op_setState08(void)
 	// markObjectRectAsDirty(obj);
 	// clearDrawObjectQueue();
 
-    Object *obj = object_get(j);
-    if (obj)
+    //Object *obj = object_get(j);
+    //if (obj)
     {
         objects_redraw();
 	    //graphics_drawObject(obj);
@@ -582,8 +579,8 @@ static void op_clearState08(void)
     //markObjectRectAsDirty(obj);
     //clearDrawObjectQueue();
 
-    Object *obj = object_get(j);
-    if (obj)
+    //Object *obj = object_get(j);
+    //if (obj)
     {
 	    objects_redraw();
     }
@@ -780,7 +777,9 @@ static void op_putActorAtObject(void)
     {
 		object_getXY(obj, &x, &y);
         boxes_adjustXY(&x, &y);
-	} else {
+	}
+    else
+    {
 		x = 30 / 8;
 		y = 60 / 8;
 	}
@@ -1088,16 +1087,17 @@ static void op_pickupObject(void)
 {
 	int id = getVarOrDirectWord(PARAM_1);
 
-    Object *obj = object_get(id);
-	if (!obj)
-		return;
+    int8_t where = object_whereIs(id);
 
-	if (object_whereIs(id) == WIO_INVENTORY)	/* Don't take an */
+    if (where == WIO_NOT_FOUND)
+        return;
+
+	if (where == WIO_INVENTORY)	/* Don't take an */
 		return;											/* object twice */
 
     DEBUG_PRINTF("Pickup object %u by %u\n", id, scummVars[VAR_EGO]);
 
-	inventory_addObject(obj, currentRoom);
+	inventory_addObject(id);
 	//markObjectRectAsDirty(obj);
     object_setOwner(id, scummVars[VAR_EGO]);
 	object_setState(id, object_getState(id) | kObjectState_08 | kObjectStateUntouchable);
@@ -1295,22 +1295,21 @@ static void op_endCutscene(void)
 
 static void op_findObject(void)
 {
-    Object *obj = 0;
 	getResultPos();
     // objects store x y without multipliers
 	uint16_t x = getVarOrDirectByte(PARAM_1);// * V12_X_MULTIPLIER;
 	uint16_t y = getVarOrDirectByte(PARAM_2);// * V12_Y_MULTIPLIER;
-	obj = object_find(x, y);
+	uint16_t id = object_find(x, y);
 
 	// if (obj == 0 && (_game.platform == Common::kPlatformNES) && (_userState & USERSTATE_IFACE_INVENTORY)) {
 	// 	if (_mouseOverBoxV2 >= 0 && _mouseOverBoxV2 < 4)
 	// 		obj = findInventory(VAR(VAR_EGO), _mouseOverBoxV2 + _inventoryOffset + 1);
 	// }
     uint16_t res = 0;
-    if (obj)
+    if (id)
     {
-        //DEBUG_PRINTF("Found object %d x=%d y=%d\n", obj->obj_nr, obj->x, obj->y);
-        res = obj->obj_nr;
+        //DEBUG_PRINTF("Found object %d\n", id);
+        res = id;
     }
     else
     {
@@ -1331,14 +1330,20 @@ static void op_walkActorToObject(void)
 	}
 }
 
+// Hardcoded to avoid file reads
+static const char *preps[] = {
+    " ", " in", " with", " on", " to"
+};
+
 static uint8_t getPreposition(char *s)
 {
     // _sentenceBuf += (const char *)(getResourceAddress(rtCostume, 78) + VAR(VAR_SENTENCE_PREPOSITION) * 8 + 2);
-    HROOM r = seekResource(&costumes[78]);
-    seekFwd(r, scummVars[VAR_SENTENCE_PREPOSITION] * 8 + 2);
-    uint8_t len = readString(r, s);
-    closeRoom(r);
-    return len;
+    // HROOM r = seekResource(&costumes[78]);
+    // seekFwd(r, scummVars[VAR_SENTENCE_PREPOSITION] * 8 + 2);
+    // uint8_t len = readString(r, s);
+    // closeRoom(r);
+    // return len;
+    return strcopy(s, preps[scummVars[VAR_SENTENCE_PREPOSITION]]);
 }
 
 
@@ -1530,7 +1535,7 @@ static void op_getObjPreposition(void)
     {
 		// byte *ptr = getOBCDFromObject(obj) + 12;
 		// setResult(*ptr >> 5);
-        setResult(object_get(obj)->preposition);
+        setResult(object_getPreposition(obj));
 	}
     else
     {
@@ -1836,7 +1841,7 @@ void executeScript(void)
     while (!exitFlag)
     {
         opcode = fetchScriptByte();
-        // if (script_id == 4)
+        // if (script_id == 4 || script_id == 2)
         // DEBUG_PRINTF("EXEC %u 0x%x op=%x\n", script_id, script_offset - 5, opcode);
         OpcodeFunc f = opcodes[opcode];
         if (!f)
@@ -1857,13 +1862,13 @@ void runScript(uint16_t s)
 
 void runObjectScript(uint16_t objId, uint8_t verb)
 {
-    Object *obj = object_get(objId);
     uint8_t offs = object_getVerbEntrypoint(objId, verb);
     if (offs == 0)
         return;
+    uint16_t obcd = object_getOBCDoffset(objId);
     DEBUG_PRINTF("New object script %u for verb %u obcd=%d verbOffs=%d\n",
-        objId, verb, obj->OBCDoffset, offs);
-    pushScript(objId, currentRoom, obj->OBCDoffset + offs, 0);
+        objId, verb, obcd, offs);
+    pushScript(objId, currentRoom, obcd + offs, 0);
 }
 
 void processScript(void)
