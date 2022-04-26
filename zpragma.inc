@@ -3,6 +3,8 @@
 #pragma output CRT_ORG_CODE = 0x6a00
 
 // pages for buffers
+#pragma output CRT_ORG_PAGE_0 = 0xC000
+#pragma output CRT_ORG_PAGE_1 = 0xE000
 #pragma output CRT_ORG_PAGE_2 = 0x4000
 #pragma output CRT_ORG_PAGE_3 = 0x4000
 #pragma output CRT_ORG_PAGE_32 = 0x4000

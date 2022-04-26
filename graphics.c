@@ -74,6 +74,8 @@ static const uint8_t tableNESPalette[] = {
 
 __sfr __at 0xfe IO_FE;
 
+//#define TESTING 1
+
 void initGraphics(void)
 {
     int i;
@@ -95,12 +97,12 @@ void initGraphics(void)
 
     // tilemap base address is 0x6000
     ZXN_WRITE_REG(0x6E, TILEMAP_BASE >> 8);
-    // tile base address is 0x6500
+    // tile base address is 0x4000
     ZXN_WRITE_REG(0x6F, TILE_BASE >> 8);
 
     // // switch on ULANext
     // ZXN_WRITE_REG(0x43 = 1;
-    
+
     // enable sprites and sprites over border
     ZXN_WRITE_REG(0x15, 0x23);
     // set sprites clipping window 320x256
@@ -108,37 +110,48 @@ void initGraphics(void)
     ZXN_WRITE_REG(0x19, 159);
     ZXN_WRITE_REG(0x19, 0);
     ZXN_WRITE_REG(0x19, 255);
-    // setup sprites first palette
-    // ZXN_WRITE_REG(0x43, 0x20);
-    // for (i = 0 ; i < sizeof(tableNESPalette) / 2 ; ++i)
-    // {
-    //     ZXN_WRITE_REG(0x40, i);
-    //     ZXN_WRITE_REG(0x44, tableNESPalette[2 * i]);
-    //     ZXN_WRITE_REG(0x44, tableNESPalette[2 * i + 1]);
-    // }
-    
+
+#ifdef TESTING
+    // palette
+    ZXN_WRITE_REG(0x43, 0x30);
+    for (i = 0 ; i < 16 ; ++i)
+    {
+        uint8_t c = i & 7;
+        ZXN_WRITE_REG(0x40, i);
+        ZXN_WRITE_REG(0x44, (c << 5) | (c << 2) | (c >> 1));
+        ZXN_WRITE_REG(0x44, 0);
+    }
+
+                      uint8_t *p;
+
     // enable layer2
     // ZXN_WRITE_REG(0xLAYER_2_CONFIG = 2 | 1;
 
-    // unsigned char *p = 0;
+    // uint8_t *p = 0;
     // for (i = 0 ; i < 0x4000 ; ++i)
     //     *p++ = i;
 
     // // DEBUG_PUTS("Setting tiles\n");
 
-    // uint8_t *p = (uint8_t*)TILE_BASE;
-    // for (i = 0 ; i < 256 ; ++i)
-    //     for (j = 0 ; j < 32 ; ++j)
-    //         *p++ = i;
+    char j;
+    PUSH_PAGE(2, 10);
+    p = (uint8_t*)TILE_BASE;
+    for (i = 0 ; i < 256 * 32 ; ++i)
+        //for (j = 0 ; j < 32 ; ++j)
+            *p++ = i;
+    POP_PAGE(2);
 
     // // DEBUG_PUTS("Setting tilemap\n");
 
-    // uint8_t *p = (uint8_t*)TILEMAP_BASE + LINE_BYTES * 26;
-    // for (i = 0 ; i < 256 ; ++i)
-    // {
-    //     *p++ = i;
-    //     *p++ = 0;//i << 4;
-    // }
+    PUSH_PAGE(3, 11);
+    p = (uint8_t*)TILEMAP_BASE;// + LINE_BYTES * 26;
+    for (i = 0 ; i < 256 ; ++i)
+    {
+        *p++ = i;
+        *p++ = 0;//i << 4;
+    }
+    POP_PAGE(3);
+#endif
 
     // reset all sprite attributes
     for (i = 0 ; i < 128 ; ++i)

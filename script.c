@@ -52,7 +52,6 @@ extern uint8_t scriptBytes[4096];
 extern uint16_t script_id;
 extern uint8_t script_status;
 extern uint8_t script_room;
-extern uint16_t script_roomoffs;
 extern uint16_t script_offset;
 extern uint32_t script_delay;
 extern uint16_t script_resultVarNumber;
@@ -82,10 +81,10 @@ static void switchScriptPage(uint8_t s)
     ZXN_WRITE_MMU2(FIRST_BANK + s);
 }
 
-static void loadScriptBytes(void)
+static void loadScriptBytes(uint16_t roomoffs)
 {
     HROOM r = openRoom(script_room);
-    esx_f_seek(r, script_roomoffs, ESX_SEEK_SET);
+    esx_f_seek(r, roomoffs, ESX_SEEK_SET);
     //readResource(r, scriptBytes, sizeof(scriptBytes));
     // always read up to 4k, because object scripts do not include size field
     readBuffer(r, scriptBytes, sizeof(scriptBytes));
@@ -93,6 +92,16 @@ static void loadScriptBytes(void)
     // for (int8_t i = 0 ; i < 16 ; ++i)
     //     DEBUG_PRINTF("%x ", scriptBytes[i]);
     // DEBUG_PUTS("\n");
+}
+
+void initScriptPages(void)
+{
+    uint8_t f;
+    for (f = 0 ; f < MAX_SCRIPTS ; ++f)
+    {
+        switchScriptPage(f);
+        script_id = 0;
+    }
 }
 
 static uint8_t findEmptyFrame(void)
@@ -165,9 +174,8 @@ static void setResult(uint16_t value)
 static void stopScriptIdx(uint8_t index)
 {
     switchScriptPage(index);
-    DEBUG_PRINTF("Stopping the script %u room %u/%u offset %x\n",
-        script_id, script_room, script_roomoffs,
-        script_offset - 4);
+    DEBUG_PRINTF("Stopping the script %u room %u offset %x\n",
+        script_id, script_room, script_offset - 4);
     script_id = 0;
     if (index == curScript)
         exitFlag = 1;
@@ -206,9 +214,8 @@ static void op_stopScript(void)
 {
     uint8_t s = getVarOrDirectByte(PARAM_1);
 
-    DEBUG_PRINTF("Stopping from script %u room %u/%u next offset %x\n",
-        script_id, script_room, script_roomoffs,
-        script_offset);
+    DEBUG_PRINTF("Stopping from script %u room %u next offset %x\n",
+        script_id, script_room, script_offset);
 
     // WORKAROUND bug #4112: If you enter the lab while Dr. Fred has the powered turned off
     // to repair the Zom-B-Matic, the script will be stopped and the power will never turn
@@ -244,9 +251,9 @@ static void pushScript(uint16_t id, uint8_t room, uint16_t roomoffs, uint16_t of
     script_id = id;
     script_status = 0;
     script_room = room;
-    script_roomoffs = roomoffs;
     script_offset = offset;
-    loadScriptBytes();
+    script_delay = 0;
+    loadScriptBytes(roomoffs);
     switchScriptPage(curScript);
 }
 

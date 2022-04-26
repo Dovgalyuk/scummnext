@@ -44,6 +44,7 @@
 
 extern int16_t scummVars[];
 
+void initScriptPages(void);
 void runScript(uint16_t s);
 void runRoomScript(uint16_t id, uint8_t room, uint16_t offs);
 void runObjectScript(uint16_t objectA, uint8_t verb);

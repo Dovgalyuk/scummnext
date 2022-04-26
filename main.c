@@ -35,6 +35,10 @@ int main()
     ZXN_NEXTREGA(REG_MACHINE_TYPE, RMT_TIMING_P3E | RMT_P3E);
     ZXN_NEXTREG(REG_TURBO_MODE, 3/*RTM_14MHZ*/); // 28MHz
 
+    // need default ZXNext pages instead of ULA screen
+    ZXN_WRITE_MMU6(0);
+    ZXN_WRITE_MMU7(1);
+
     // page for scripts
     ZXN_WRITE_MMU2(32);
 
@@ -77,8 +81,13 @@ int main()
     // NES base tiles
     decodeTiles(0);
 
+    initScriptPages();
     // boot script
     runScript(1);
+
+    //startScene(33);
+    // graphics_updateScreen();
+    //DEBUG_HALT;
 
     while (1)
     {
