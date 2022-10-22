@@ -144,7 +144,7 @@ void initGraphics(void)
     // // DEBUG_PUTS("Setting tilemap\n");
 
     PUSH_PAGE(3, 11);
-    p = (uint8_t*)TILEMAP_BASE;// + LINE_BYTES * 26;
+    p = (uint8_t*)TILEMAP_BASE + LINE_BYTES * 26;
     for (i = 0 ; i < 256 ; ++i)
     {
         *p++ = i;
@@ -378,6 +378,14 @@ void graphics_printAtXY(const uint8_t *s, uint8_t x, uint8_t y, uint8_t left, ui
             continue;
         if (c == '@')
         {
+            continue;
+        }
+        else if (c == ' ')
+        {
+            // need special space color and symbol
+            *screen++ = 0;
+            *screen++ = 3 << 4;
+            ++x;
             continue;
         }
         else if (c == 1)

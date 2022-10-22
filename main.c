@@ -20,15 +20,19 @@ const int _numRooms = 55;
 // costume 78 is a preposition list
 // costume 79 is unused but allocated, so the total is a nice even number :)
 
-int _numBitVariables = 4096;			// 2048
-int _numArray = 50;
-int _numNewNames = 50;
-int _numCharsets = 9;					// 9
+//int _numBitVariables = 4096;			// 2048
+//int _numArray = 50;
+//int _numNewNames = 50;
+//int _numCharsets = 9;					// 9
 // all scripts are global in MM
 //int _numGlobalScripts = 200;
-int _numFlObject = 50;
+//int _numFlObject = 50;
 
-int _shadowPaletteSize = 256;
+//int _shadowPaletteSize = 256;
+
+#ifdef HABR
+int habr;
+#endif
 
 int main()
 {
@@ -102,7 +106,10 @@ int main()
         cursor_animate();
 
         graphics_updateScreen();
-
-        //DEBUG_DELAY(5000);
+#ifdef HABR
+        int n = 10000;
+        while (n--)
+            ++habr;
+#endif
     }
 }

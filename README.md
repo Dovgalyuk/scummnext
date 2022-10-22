@@ -42,3 +42,10 @@ extern uint8_t costdesc[51];
 extern uint8_t costlens[279];
 extern uint8_t costoffs[556];
 
+
+Z88DK:
+
+https://github.com/Dovgalyuk/z88dk/tree/scumm
+
+ z88dk/build.sh
+ z88dk/libsrc/_DEVELOPMENT/make.sh

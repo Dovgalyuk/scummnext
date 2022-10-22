@@ -2,6 +2,7 @@
 #define DEBUG_H
 
 //#define DEBUG
+//#define HABR
 
 #ifdef DEBUG
 #define DEBUG_PUTC(c) debug_putc(c)

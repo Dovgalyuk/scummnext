@@ -103,7 +103,7 @@ static uint16_t decodeNESTiles(uint8_t *buf, uint8_t set)
     closeRoom(f);
     if (count == 0)
         count = bytes / 16;
-    DEBUG_PRINTF("NES tiles %u %u/%u\n", count, len, bytes);
+    // DEBUG_PRINTF("NES tiles %u %u/%u\n", count, len, bytes);
     return count;
 }
 
@@ -137,6 +137,12 @@ void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, 
             // zero is transparent
             if (cc)
                 cc |= sprpal;
+#ifdef HABR
+            if (i == 0 || j == 0)
+            {
+                cc = 0x2;
+            }
+#endif
             c = (c << 4) | cc;
             if (j & 1)
             {
@@ -151,20 +157,48 @@ void graphics_loadSpritePattern(uint8_t nextSprite, uint8_t tile, uint8_t mask, 
                 c1 <<= 1;
             }
         }
+#ifdef HABR
+        if (i == 0)
+        {
+            IO_SPRITE_PATTERN = 0x22;
+            IO_SPRITE_PATTERN = 0x22;
+            IO_SPRITE_PATTERN = 0x22;
+            IO_SPRITE_PATTERN = 0x22;
+        }
+        else
+        {
+            IO_SPRITE_PATTERN = 0x0;
+            IO_SPRITE_PATTERN = 0x0;
+            IO_SPRITE_PATTERN = 0x0;
+            IO_SPRITE_PATTERN = 0x02;
+        }
+#else
         IO_SPRITE_PATTERN = 0x0;
         IO_SPRITE_PATTERN = 0x0;
         IO_SPRITE_PATTERN = 0x0;
         IO_SPRITE_PATTERN = 0x0;
+#endif
     }
     for (i = 0 ; i < 64 ; ++i)
-        IO_SPRITE_PATTERN = 0x0;
+    {
+#ifdef HABR
+        if (i >= 64 - 8)
+            IO_SPRITE_PATTERN = 0x22;
+        else if (i % 8 == 0)
+            IO_SPRITE_PATTERN = 0x20;
+        else if (i % 8 == 7)
+            IO_SPRITE_PATTERN = 0x02;
+        else
+#endif
+            IO_SPRITE_PATTERN = 0x0;
+    }
 
     POP_PAGE(2);
 }
 
 void decodeTiles(uint8_t set)
 {
-    DEBUG_PRINTF("Decoding tiles set %u\n", set);
+    // DEBUG_PRINTF("Decoding tiles set %u\n", set);
     PUSH_PAGE(2, BUF_PAGE);
     setTiles(decodeNESTiles(tileBuf, 37 + set));
     POP_PAGE(2);

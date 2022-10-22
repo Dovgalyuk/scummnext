@@ -477,7 +477,7 @@ static void op_drawObject(void)
 	idx = getVarOrDirectWord(PARAM_1);
 	xpos = getVarOrDirectByte(PARAM_2);
 	ypos = getVarOrDirectByte(PARAM_3);
-    DEBUG_PRINTF("Draw object %u at %u,%u\n", idx, xpos, ypos);
+    //DEBUG_PRINTF("Draw object %u at %u,%u\n", idx, xpos, ypos);
 
 	if (xpos != 0xFF)
     {
@@ -2093,8 +2093,8 @@ void checkExecVerbs(void)
 		// 	return;
 
         uint8_t x = cursorX / 8;
-        DEBUG_PRINTF("Clicked at %d %d %d virt %d %d\n", x, y, zone,
-            scummVars[VAR_VIRT_MOUSE_X], scummVars[VAR_VIRT_MOUSE_Y]);
+        // DEBUG_PRINTF("Clicked at %d %d %d virt %d %d\n", x, y, zone,
+        //     scummVars[VAR_VIRT_MOUSE_X], scummVars[VAR_VIRT_MOUSE_Y]);
 		if (zone == kVerbVirtScreen/* && _mouse.y <= zone->topline + 8*/)
         {
 		// 	// Click into V2 sentence line
@@ -2111,7 +2111,7 @@ void checkExecVerbs(void)
                 // TODO: Some coordinate hack
                 x += LINE_GAP;
             	uint16_t object = inventory_checkXY(x, y);
-                DEBUG_PRINTF("Clicked object %u\n", object);
+                // DEBUG_PRINTF("Clicked object %u\n", object);
             	if (object > 0)
                 {
             		runInputScript(kInventoryClickArea, object);

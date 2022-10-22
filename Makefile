@@ -12,11 +12,11 @@ scummnext.nex: $(OFILES)
 
 %.o: %.c
 #	zcc +zxn -o $@ -c $^ -v -SO3 -clib=sdcc_iy --max-allocs-per-node200000 -subtype=nex -Izxn --list
-	zcc +scumm -o $@ -c $^ -v -SO3 --max-allocs-per-node200000 -subtype=scumm -Izxn --list
+	zcc +scumm -o $@ -c $^ -v -SO3 --max-allocs-per-node200000 -subtype=scumm -Izxn -l
 
 %.o: %.asm
 #	zcc +zxn -o $@ -c $^ -v -SO3 -clib=sdcc_iy --max-allocs-per-node200000 -subtype=nex -Izxn --list
-	zcc +scumm -o $@ -c $^ -v -SO3 --max-allocs-per-node200000 -subtype=scumm -Izxn --list
+	zcc +scumm -o $@ -c $^ -v -SO3 --max-allocs-per-node200000 -subtype=scumm -Izxn -l
 
 clean:
 	$(RM) *.o *.lis scummnext.nex

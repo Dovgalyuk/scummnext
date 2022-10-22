@@ -48,6 +48,30 @@ static void setupRoomSubBlocks(void)
 
     DEBUG_PRINTF("Open room %u width %u objects %u boxes %u\n", currentRoom, roomWidth, numObj, numBoxes);
 
+    // int col, row;
+    // debug_putc('\n');
+    // for (row = 0 ; row < roomHeight * 2 ; ++row)
+    // {
+    //     for (col = 0 ; col < roomWidth ; ++col)
+    //     {
+    //         char c = '.';
+    //         int i;
+    //         for (i = 0 ; i < numBoxes ; ++i)
+    //         {
+    //             if (col >= boxes[i].ulx && col <= boxes[i].urx
+    //                 && row >= boxes[i].uy / 2 && row <= boxes[i].ly / 2) {
+    //                 if (i < 10)
+    //                     c = '0' + i;
+    //                 else
+    //                     c = 'A' + i;
+    //                 break;
+    //             }
+    //         }
+    //         debug_putc(c);
+    //     }
+    //     debug_putc('\n');
+    // }
+
     // int i;
     // for (i = 0 ; i < numBoxes ; ++i)
     // {
