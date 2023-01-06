@@ -2,6 +2,12 @@ Mini-SCUMMVM for ZXNext.
 
 Supports only Maniac Mansion from NES.
 
+Directory structure for running:
+* scummnext.nex
+* MM
+  * unpacked *.LFL from NES image
+
+
 Memory map:
 
 * 0x0000 - ROM, Also used for temporary mapping of other pages
